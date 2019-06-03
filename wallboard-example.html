@@ -1,0 +1,92 @@
+<html>
+ <head>
+  <title>Amazon Connect Wallboard</title>
+  <script language="javascript">
+   /*
+    * Set API Gateway invoke URL in the following line.
+    * Remember to include the stage name, region name and the wallboard
+    * definition name.
+    */
+   API_URI  = "https://xxxxxxxx.execute-api.us-east-1.amazonaws.com/wallboard/?Wallboard=yyyyyy"
+   RefreshInterval = 5000 // How often to retrieve data in milliseconds
+
+   var API_Client = null;
+
+   function GetWallboard() {
+
+    API_Client = new XMLHttpRequest();
+    API_Client.onreadystatechange = ProcessResponse;
+    API_Client.open("get", API_URI);
+    API_Client.setRequestHeader("Content-Type", "application/json");
+    API_Client.timeout = 10000
+    API_Client.ontimeout = ProcessTimeout;
+    API_Client.send();
+
+    setTimeout(GetWallboard, RefreshInterval);
+   }
+
+   function ProcessResponse() {
+    if (API_Client.readyState == XMLHttpRequest.DONE) {
+     try {
+      Result = API_Client.responseText;
+      document.getElementById("wallboard").innerHTML = Result
+     }
+     catch(error) {
+      console.log(error);
+     }
+    }
+   }
+
+   function ProcessTimeout() {
+    console.log("Query to API Gateway timed out")
+   }
+  </script>
+  <style>
+   /*
+    * "-yyyyyy" is from the wallboard definition in DynamoDB and the API
+    * Gateway call above - can also just use "table" if there's no other
+    * tables in this file
+    */
+   table.wallboard-yyyyyy {width: 50%; table-layout: fixed;}
+   table.wallboard-yyyyyy td {text-align: center; vertical-align: top;}
+  </style>
+ </head>
+ <body>
+  <h1>This is an example dashboard/wallboard for <a href="https://aws.amazon.com/connect/">Amazon Connect</a></h1>
+  <p>
+   In the Javascript above, set the &quot;API_URI&quot; variable to the
+   following:
+  </p>
+  <p style="margin-left: 20px; font-weight: bold; font-style: italic;">
+   https://API_Gateway_Invoke_URL/wallboard/?Wallboard=Wallboard_Identifier
+  </p>
+  <p>
+   Where &quot;API_Gateway_Invoke_URL&quot; is found in the
+   <A href="https://aws.amazon.com/api-gateway/">API Gateway</A> console and the
+   &quot;Wallboard_Identifer&quot; is what you've called your dashboard/wallboard
+   in the <a href="https://aws.amazon.com/dynamodb/">DynamoDB</a> table. This
+   will have been configured in the YAML template when the dashboard/wallboard
+   was created.
+  </p>
+  <p>
+   The API returns a formatted HTML table that it places in the
+   &quot;wallboard&quot; div below. Colours for cells are set in the
+   dashboard/wallboard definition and are automatically returned in the table -
+   however, you can choose to use additional styles in the calling HTML page to
+   format the table. For example, you may choose to centre the data in each table
+   cell. This is deliberately done so that customers may display their
+   dashboard/wallboard however they like or can embed it in any HTML page as
+   required. Individual cells have unique classes and labels; within each cell
+   there is a separate div for static text and data. You'll find brief examples of
+   this in the HTML &lt;head&gt; section above.
+  </p>
+  <p>
+   You may also adjust the refresh interval by changing the
+   &quot;RefreshInterval&quot; variable in the code above.
+  </p>
+  <div id="wallboard"></div>
+  <script type="text/javascript">
+   GetWallboard();
+  </script>
+ </body>
+</html>
