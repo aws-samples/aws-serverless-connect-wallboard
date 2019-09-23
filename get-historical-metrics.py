@@ -38,7 +38,7 @@ LastRun     = 0
 DataSources = {}
 Data        = {}
 
-Table  = boto3.resource("dynamodb").Table(DDBTableName)
+Table  = ""
 Logger = logging.getLogger()
 
 MetricUnitMapping = {
@@ -202,6 +202,8 @@ def lambda_handler(event, context):
     if os.environ.get("WallboardTable") is not None: DDBTableName  = os.environ.get("WallboardTable")
     if os.environ.get("ConfigTimeout")  is not None: ConfigTimeout = os.environ.get("ConfigTimeout")
     
+    Table = boto3.resource("dynamodb").Table(DDBTableName)
+
     GetConfiguration()
     GetHistoricalData()
     WriteData()

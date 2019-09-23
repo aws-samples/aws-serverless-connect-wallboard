@@ -55,7 +55,7 @@ def GetCalculations(CalculationsConfig):
             print("Missing formula calculation in "+Calc["ReferenceName"])
             sys.exit(1)
 
-        Calculations.append({"Name":{"S":Calc["Calculation"]}, "Formula":{"S":Calc["Formula"]}})
+        Calculations.append({"Name":{"S":str(Calc["Calculation"])}, "Formula":{"S":Calc["Formula"]}})
 
     return(Calculations)
 
@@ -72,7 +72,7 @@ def GetThresholds(ThresholdConfig):
             sys.exit(1)
 
         Item = {}
-        Item["Name"]      = {"S":Threshold["Threshold"]}
+        Item["Name"]      = {"S":str(Threshold["Threshold"])} # Stringify just in case this is a numeric
         Item["Reference"] = {"S":Threshold["Reference"]}
         if "WarnBelow"  in Threshold: Item["WarnBelow"]  = {"S":str(Threshold["WarnBelow"])}
         if "AlertBelow" in Threshold: Item["AlertBelow"] = {"S":str(Threshold["AlertBelow"])}
@@ -158,7 +158,6 @@ def SaveToDynamoDB(WallboardName,Records,RecordType):
         Item["Identifier"] = {"S":WallboardName}
         if RecordType != "Settings":
             Item["RecordType"] = {"S":RecordType+str(Count)}
-            Count += 1
         else:
             Item["RecordType"] = {"S":RecordType}
 

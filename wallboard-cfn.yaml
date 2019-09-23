@@ -1,0 +1,318 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+#
+# Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+
+Description: >
+  Create the Lambda functions and other components required for the Connect Wallboard.
+
+Parameters:
+  DDBTable:
+    Type: String
+    Description: DynamoDB table to create
+    Default: ConnectWallboard
+  KinesisAgentStream:
+    Type: String
+    Description: Kinesis agent event stream ARN - required to set appropriate Lambda trigger
+
+Outputs:
+  APIGatewayURL:
+    Value: !Join ["", ["https://", !Ref "APIGateway", ".execute-api.", !Ref "AWS::Region", ".amazonaws.com/", !Ref "APIGatewayStage", "/wallboard/"]]
+  DynamoDBTableName:
+    Value: !Ref DDBTable
+
+Resources: 
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DDBTable
+      AttributeDefinitions:
+        - AttributeName: "Identifier"
+          AttributeType: "S"
+        - AttributeName: "RecordType"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "Identifier"
+          KeyType: HASH
+        - AttributeName: "RecordType"
+          KeyType: RANGE
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 10
+        WriteCapacityUnits: 10
+
+  LambdaRenderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: DynamoDBPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                - dynamodb:Query
+                Effect: Allow
+                Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DDBTable}"
+        - PolicyName: ConnectPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                - connect:GetCurrentMetricData
+                Effect: Allow
+                Resource: "*"
+
+  LambdaHistoricalRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: DynamoDBPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                - dynamodb:Scan
+                - dynamodb:PutItem
+                Effect: Allow
+                Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DDBTable}"
+        - PolicyName: ConnectPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                - connect:GetMetricData
+                Effect: Allow
+                Resource: "*"
+
+  LambdaAgentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaKinesisExecutionRole"
+      Policies:
+        - PolicyName: DynamoDBPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                - dynamodb:Scan
+                - dynamodb:PutItem
+                Effect: Allow
+                Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DDBTable}"
+
+  LambdaRenderPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn: 
+      - APIGateway
+      - LambdaRender
+    Properties:
+      Action: lambda:invokeFunction
+      FunctionName: !Ref LambdaRender
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*"
+
+  LambdaRender:
+    Type: AWS::Lambda::Function
+    DependsOn: LambdaRenderRole
+    Properties:
+      FunctionName: "Connect-Wallboard-Render"
+      Code:
+        S3Bucket: !Sub "connectwallboard-${AWS::Region}"
+        S3Key: render-wallboard.zip
+      Description: "Connect wallboard rendering function"
+      Handler: "render-wallboard.lambda_handler"
+      Role: !GetAtt LambdaRenderRole.Arn
+      Runtime: "python3.6"
+      Timeout: 20
+      Environment:
+        Variables:
+          WallboardTable: !Ref DDBTable
+
+  LambdaAgentSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !Ref KinesisAgentStream
+      FunctionName: !Ref LambdaAgent
+      StartingPosition: LATEST
+
+  LambdaAgent:
+    Type: AWS::Lambda::Function
+    DependsOn: LambdaAgentRole
+    Properties:
+      FunctionName: "Connect-Wallboard-Agent-Events"
+      Code:
+        S3Bucket: !Sub "connectwallboard-${AWS::Region}"
+        S3Key: process-agent-event.zip
+      Description: "Connect wallboard agent event processing"
+      Handler: "process-agent-event.lambda_handler"
+      Role: !GetAtt LambdaAgentRole.Arn
+      Runtime: "python3.6"
+      Timeout: 20
+      Environment:
+        Variables:
+          WallboardTable: !Ref DDBTable
+
+  LambdaHistoricalPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn: LambdaHistorical
+    Properties:
+      Action: lambda:invokeFunction
+      FunctionName: !Ref LambdaHistorical
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt HistoricalEvent.Arn
+
+  LambdaHistorical:
+    Type: AWS::Lambda::Function
+    DependsOn: LambdaHistoricalRole
+    Properties:
+      FunctionName: "Connect-Wallboard-Historical-Metrics"
+      Code:
+        S3Bucket: !Sub "connectwallboard-${AWS::Region}"
+        S3Key: get-historical-metrics.zip
+      Description: "Connect wallboard historical metrics data retrieval"
+      Handler: "get-historical-metrics.lambda_handler"
+      Role: !GetAtt LambdaHistoricalRole.Arn
+      Runtime: "python3.6"
+      Timeout: 20
+      Environment:
+        Variables:
+          WallboardTable: !Ref DDBTable
+
+  HistoricalEvent:
+    Type: "AWS::Events::Rule"
+    DependsOn: LambdaHistorical
+    Properties:
+      Name: "Connect-Wallboard-Historical-Collection"
+      ScheduleExpression: "rate(1 minute)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt LambdaHistorical.Arn
+          Id: "HistoricalDataCollection"
+
+  APIGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: "Connect Wallboard"
+      FailOnWarnings: True
+
+  APIGatewayStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      StageName: "prod"
+      RestApiId: !Ref APIGateway
+      DeploymentId: !Ref APIGatewayDeployment
+      MethodSettings:
+        - ResourcePath: "/"
+          HttpMethod: GET
+          DataTraceEnabled: True
+
+  APIGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - APIGateway
+      - APIGWMethod
+    Properties:
+      RestApiId: !Ref APIGateway
+
+  APIGatewayResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref APIGateway
+      ParentId: !GetAtt APIGateway.RootResourceId
+      PathPart: "wallboard"
+
+  APIGWMethod:
+    Type: AWS::ApiGateway::Method
+    DependsOn:  LambdaRender
+    Properties:
+      ResourceId: !Ref APIGatewayResource
+      RestApiId: !Ref APIGateway
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Join ["", ["arn:aws:apigateway:", !Ref "AWS::Region", ":lambda:path/2015-03-31/functions/", !GetAtt LambdaRender.Arn, "/invocations"]]
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates:
+              application/json: ""
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: False
+
+  APIGWOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ResourceId: !Ref APIGatewayResource
+      RestApiId: !Ref APIGateway
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: "{'statusCode': 200}"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: False
+            method.response.header.Access-Control-Allow-Headers: False
+            method.response.header.Access-Control-Allow-Methods: False
