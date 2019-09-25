@@ -178,7 +178,7 @@ def CreateDDBTable():
                                     ProvisionedThroughput={"ReadCapacityUnits":5, "WriteCapacityUnits":5})
 
         Table = Dynamo.describe_table(TableName=DDBTableName)
-        while Table["Table"]["TableStatus"] <> "ACTIVE":
+        while Table["Table"]["TableStatus"] != "ACTIVE":
             print("Waiting for table creation. State: %s" % (Table["Table"]["TableStatus"]))
             time.sleep(10)
             Table = Dynamo.describe_table(TableName=DDBTableName)
