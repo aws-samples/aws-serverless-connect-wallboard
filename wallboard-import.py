@@ -158,6 +158,7 @@ def SaveToDynamoDB(WallboardName,Records,RecordType):
         Item["Identifier"] = {"S":WallboardName}
         if RecordType != "Settings":
             Item["RecordType"] = {"S":RecordType+str(Count)}
+            Count += 1
         else:
             Item["RecordType"] = {"S":RecordType}
 
