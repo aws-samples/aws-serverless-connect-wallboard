@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this
 # software and associated documentation files (the "Software"), to deal in the Software
@@ -97,12 +97,45 @@ def GetAgentStates(AgentConfig):
 
 def GetDataSources(SourceConfig):
     Sources = []
+    Connect = boto3.client('connect')
+    Boto3Warning = False
+
 
     for Item in SourceConfig:
         SourceInfo = {}
         SourceInfo["Name"]      = {"S":Item["Source"]}
         SourceInfo["Reference"] = {"S":Item["Reference"]}
         Sources.append(SourceInfo)
+
+        #
+        # Just in case, check the references given and see if we can confirm
+        # if the queue and Connect instance exist. This helps if there is a
+        # typo in the definition file.
+        # 
+        try:
+            (InstanceId,QueueId,Metric) = Item["Reference"].split(":")
+        except Exception as e:
+            print("Check formatting of "+Item["Source"]+": "+str(e))
+            continue
+
+        try:
+            QueueResponse = Connect.list_queues(InstanceId=InstanceId)
+        except AttributeError:
+            if not Boto3Warning:
+                print("Could not get boto3 response - are you using the latest version?")
+                print(" -> Unable to verify if the reference values are correct")
+                Boto3Warning = True
+            continue
+        except:
+            print(Item["Source"]+": The InstanceId may be incorrect: "+InstanceId)
+            continue
+        
+        QueueList = []
+        for Queue in QueueResponse['QueueSummaryList']:
+            QueueList.append(Queue['Id'])
+
+        if QueueId not in QueueList:
+            print(Item["Source"]+": The QueueId may be incorrect: "+QueueId)
 
     return(Sources)
 
