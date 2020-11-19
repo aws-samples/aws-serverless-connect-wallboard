@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this
 # software and associated documentation files (the "Software"), to deal in the Software
@@ -32,14 +32,6 @@ import re
 DDBTableName    = "ConnectWallboard"
 ConfigTimeout   = 300 # How long we wait before grabbing the config from the database
 RealtimeTimeout = 5 # How long before in between polling the real-time API
-
-DefaultSettings = Settings = {
-    "AlertBackgroundColour": "red", 
-    "WarningBackgroundColour": "yellow", 
-    "TextColour": "black", 
-    "Font": "sans-serif",
-    "BackgroundColour": "lightgrey"
-}
 
 #
 # Global state
@@ -74,8 +66,19 @@ MetricUnitMapping = {
   }
 
 def GetConfiguration(WallboardName):
-    global LastRun,ConfigTimeout,DefaultSettings,DDBTableName,Logger,Table,Settings,Cells,Thresholds,AgentStates,Calculations,DataSources
+    global LastRun,ConfigTimeout,DDBTableName,Logger,Table,Settings,Cells,Thresholds,AgentStates,Calculations,DataSources
     
+    #
+    # Sane defaults for new wallboards in case specific settings aren't given
+    #
+    DefaultSettings = {
+        "AlertBackgroundColour": "red", 
+        "WarningBackgroundColour": "yellow", 
+        "TextColour": "black", 
+        "Font": "sans-serif",
+        "BackgroundColour": "lightgrey"
+    }
+
     #
     # We only want to retrieve the configuration for the wallboard if we haven't
     # retrieved it recently or it hasn't previously been loaded.
