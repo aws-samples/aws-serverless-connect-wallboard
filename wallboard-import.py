@@ -234,7 +234,7 @@ if len(sys.argv) != 2:
 
 with open(sys.argv[1]) as Input:
     try:
-        Config = yaml.load(Input)
+        Config = yaml.safe_load(Input)
     except yaml.YAMLError as e:
         print(e)
         sys.exit(1)
