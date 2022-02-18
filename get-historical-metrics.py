@@ -28,8 +28,9 @@ import datetime
 #
 # Things to configure
 #
-DDBTableName    = "ConnectWallboard"
-ConfigTimeout   = 300 # How long we wait before grabbing the config from the database
+DDBTableName          = "ConnectWallboard"
+ConfigTimeout         = 300 # How long we wait before grabbing the config from the database
+ServiceLevelThreshold = 60  # See note in README.md
 
 #
 # Global state
@@ -141,7 +142,11 @@ def GetHistoricalData():
 
         if ConnectARN not in ConnectList: ConnectList[ConnectARN] = {}
         if QueueARN not in ConnectList[ConnectARN]: ConnectList[ConnectARN][QueueARN] = []
-        ConnectList[ConnectARN][QueueARN].append({"Name":Metric,"Unit":MetricUnitMapping[Metric][0],"Statistic":MetricUnitMapping[Metric][1]})
+
+        if Metric == 'SERVICE_LEVEL':
+            ConnectList[ConnectARN][QueueARN].append({"Name":Metric,"Unit":MetricUnitMapping[Metric][0],"Statistic":MetricUnitMapping[Metric][1],"Threshold":{"Comparison":"LT","ThresholdValue":ServiceLevelThreshold}})
+        else:
+            ConnectList[ConnectARN][QueueARN].append({"Name":Metric,"Unit":MetricUnitMapping[Metric][0],"Statistic":MetricUnitMapping[Metric][1]})
 
     FiveMinuteMark = datetime.datetime.now().minute-datetime.datetime.now().minute%5
     

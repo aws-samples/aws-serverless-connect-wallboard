@@ -77,6 +77,15 @@ Finally, you need to specify the metric that you wish to reference. There are ma
 
 In a cell, you specify which data you wish to display by using the `Reference` tag. The data can be a direct reference (i.e. data that is being drawn from Connect directly); it can be the result of a calculation (several metrics that have been somehow modified - see below); or it can be the name of an agent (see below).
 
+#### Special note about SERVICE_LEVEL
+Thanks to `eaagastr` for pointing this out.
+
+SERVICE_LEVEL is an historical metric that requires an additional parameter: Threshold. This is because the metric is determining what the service level is of a queue and therefore needs the number of seconds that it should evaluate the service level over.
+
+For the time being, I've put a small hack into the code so that it doesn't throw an error when SERVICE_LEVEL is requested as a metric. At the top of `get-historical-metrics.py` you'll see a variable which is `ServiceLevelThreshold` and it is set to 60 (seconds). This is static across all queues - you can change this value (between 1 and 604800 inclusive) but you can't set it individually per queue.
+
+In future, this might change - so that you can specify a different threshold per queue. If this is of interest, send me a message.
+
 ### Calculations
 Calculations allow you to take metrics and perform simple mathematical operations on them. For example, you may have three queues and wish to display the total number of callers for all three queues. To do this, you could use the following snippet:
 ```yaml
