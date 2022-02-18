@@ -166,7 +166,7 @@ Resources:
       Description: "Connect wallboard rendering function"
       Handler: "render-wallboard.lambda_handler"
       Role: !GetAtt LambdaRenderRole.Arn
-      Runtime: "python3.6"
+      Runtime: "python3.9"
       Timeout: 20
       Environment:
         Variables:
@@ -190,7 +190,7 @@ Resources:
       Description: "Connect wallboard agent event processing"
       Handler: "process-agent-event.lambda_handler"
       Role: !GetAtt LambdaAgentRole.Arn
-      Runtime: "python3.6"
+      Runtime: "python3.9"
       Timeout: 20
       Environment:
         Variables:
@@ -216,7 +216,7 @@ Resources:
       Description: "Connect wallboard historical metrics data retrieval"
       Handler: "get-historical-metrics.lambda_handler"
       Role: !GetAtt LambdaHistoricalRole.Arn
-      Runtime: "python3.6"
+      Runtime: "python3.9"
       Timeout: 20
       Environment:
         Variables:
