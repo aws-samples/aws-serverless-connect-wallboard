@@ -24,6 +24,7 @@ import os
 import time
 import boto3
 from botocore.exceptions import ClientError
+from botocore.exceptions import NoCredentialsError
 
 #
 # Function definitions
@@ -126,6 +127,9 @@ def GetDataSources(SourceConfig):
                 print(" -> Unable to verify if the reference values are correct")
                 Boto3Warning = True
             continue
+        except NoCredentialsError:
+            print("FATAL: No AWS credentials could be found")
+            sys.exit(1)
         except:
             print(Item["Source"]+": The InstanceId may be incorrect: "+InstanceId)
             continue
@@ -197,6 +201,9 @@ def SaveToDynamoDB(WallboardName,Records,RecordType):
 
         try:
             Dynamo.put_item(TableName=DDBTableName, Item=Item)
+        except NoCredentialsError:
+            print("FATAL: No AWS credentials could be found")
+            sys.exit(1)
         except ClientError as e:
             print("DynamoDB error: "+e.response["Error"]["Message"])
 
@@ -204,6 +211,9 @@ def CreateDDBTable():
     Dynamo = boto3.client("dynamodb")
     try:
         Response = Dynamo.describe_table(TableName=DDBTableName)
+    except NoCredentialsError:
+        print("FATAL: No AWS credentials could be found")
+        sys.exit(1)
     except:
         Table = Dynamo.create_table(TableName=DDBTableName,
                                     KeySchema=[{"AttributeName":"Identifier", "KeyType":"HASH"}, {"AttributeName":"RecordType", "KeyType":"RANGE"}],
