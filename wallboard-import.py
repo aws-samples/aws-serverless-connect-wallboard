@@ -130,8 +130,9 @@ def GetDataSources(SourceConfig):
         except NoCredentialsError:
             print("FATAL: No AWS credentials could be found")
             sys.exit(1)
-        except:
+        except Exception as e:
             print(Item["Source"]+": The InstanceId may be incorrect: "+InstanceId)
+            print(e)
             continue
         
         QueueList = []
