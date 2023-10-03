@@ -27,7 +27,7 @@ Defaults:
   AlertBackgroundColor: <color for cells in "alert" state - default is red>
 
 Sources:
-  - Source: <Mandatory: (local wallboard) name of data source>
+  - Source: <Mandatory: (local to this wallboard) name of data source>
     Description: <human readable description>
     Reference: <Mandatory: reference to data source in Connect - see below>
 
@@ -36,10 +36,6 @@ Thresholds:
     Reference: <Mandatory: name of source created in Sources section - the metric to track>
     WarnBelow: <Either WarnBelow or WarnAbove: value for warning (yellow) when metric is below this value>
     AlertBelow: <Either AlertBelow or AlertAbove: value for alert (red) when metric is below this value>
-  - Threshold: <Mandatory: unique name of threshold>
-    Reference: <Mandatory: name of source created in Sources section - the metric to track>
-    WarnAbove: <Either WarnBelow or WarnAbove: value for warning (yellow) when metric is below this value>
-    AlertAbove: <Either AlertBelow or AlertAbove: value for alert (red) when metric is below this value>
 
 Calculations:
   - Calculation: <Mandatory: unique name of calculation>
@@ -64,27 +60,65 @@ Rows:
 ```
 
 ### References
-When specifying references to data coming from Connect the format for each reference is as follows:
+When specifying references to data in Amazon Connect the format for each is as follows:
 ```yaml
 xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy:AGENTS_AVAILABLE
 ```
 
-`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` is taken from the Connect instance ARN. For example, if an instance has an ARN of `arn:aws:connect:us-east-1:111122223333:instance/12345678-1234-1234-1234-123456789012` then you want to use `12345678-1234-1234-1234-123456789012` as the first part of the reference.
+`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` is the Connect instance identifier. For example, if an instance has an ARN of `arn:aws:connect:us-east-1:111122223333:instance/12345678-1234-1234-1234-123456789012` then you want to use `12345678-1234-1234-1234-123456789012` as the first part of the reference. You can retrieve the Connect instance id directly from the AWS command-line tool by running `aws connect list-instances` and using the `Id` field.
 
-`yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy` is taken from the Connect queue ARN. For example, if a queue has an ARN of `arn:aws:connect:us-east-1:111122223333:instance/12345678-1234-1234-1234-123456789012/queue/87654321-4321-4321-4321-210987654321` then you want to use `87654321-4321-4321-4321-210987654321` as the second part of the reference.
+`yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy` is the Connect queue identifier. For example, if a queue has an ARN of `arn:aws:connect:us-east-1:111122223333:instance/12345678-1234-1234-1234-123456789012/queue/87654321-4321-4321-4321-210987654321` then you want to use `87654321-4321-4321-4321-210987654321` as the second part of the reference. You can retrieve the Queue id directly from the command-line by running `aws conenct list-queues --instance-id <Conenct instance id>` and using the `Id` field.
 
-Finally, you need to specify the metric that you wish to reference. There are many metrics available and the wallboard will retrieve both real-time and historical metrics for you without you needing to specify which API to use. See the [GetCurrentMetricData API documentation](https://docs.aws.amazon.com/connect/latest/APIReference/API_GetCurrentMetricData.html) for real-time metrics and the [GetMetric API documentation](https://docs.aws.amazon.com/connect/latest/APIReference/API_GetMetricData.html) for historical metrics. Examples, are `AGENTS_AVAILABLE` and `CONTACTS_ABANDONED`.
+Finally, you need to specify the metric that you wish to reference. There are many metrics available and the wallboard will retrieve both real-time and historical metrics for you without you needing to specify which is which. In this version, the wallboard supports the following metrics for each queue:
+ - CONTACTS_QUEUED
+ - CONTACTS_HANDLED
+ - CONTACTS_ABANDONED
+ - CONTACTS_CONSULTED
+ - CONTACTS_AGENT_HUNG_UP_FIRST
+ - CONTACTS_HANDLED_INCOMING
+ - CONTACTS_HANDLED_OUTBOUND
+ - CONTACTS_HOLD_ABANDONS
+ - CONTACTS_TRANSFERRED_IN
+ - CONTACTS_TRANSFERRED_OUT
+ - CONTACTS_TRANSFERRED_IN_FROM_QUEUE
+ - CONTACTS_TRANSFERRED_OUT_FROM_QUEUE
+ - CALLBACK_CONTACTS_HANDLED
+ - CALLBACK_CONTACTS_HANDLED
+ - API_CONTACTS_HANDLED
+ - CONTACTS_MISSED
+ - OCCUPANCY
+ - HANDLE_TIME
+ - AFTER_CONTACT_WORK_TIME
+ - QUEUED_TIME
+ - ABANDON_TIME
+ - QUEUE_ANSWER_TIME
+ - HOLD_TIME
+ - INTERACTION_TIME
+ - INTERACTION_AND_HOLD_TIME
+ - SERVICE_LEVEL
+ - AGENTS_AVAILABLE
+ - AGENTS_ONLINE
+ - AGENTS_ON_CALL
+ - AGENTS_STAFFED
+ - AGENTS_AFTER_CONTACT_WORK
+ - AGENTS_NON_PRODUCTIVE
+ - AGENTS_ERROR
+ - CONTACTS_IN_QUEUE
+ - OLDEST_CONTACT_AGE
+ - CONTACTS_SCHEDULED
 
-In a cell, you specify which data you wish to display by using the `Reference` tag. The data can be a direct reference (i.e. data that is being drawn from Connect directly); it can be the result of a calculation (several metrics that have been somehow modified - see below); or it can be the name of an agent (see below).
+See the [GetCurrentMetricData API documentation](https://docs.aws.amazon.com/connect/latest/APIReference/API_GetCurrentMetricData.html) for a complete list and description of real-time metrics and the [GetMetric API documentation](https://docs.aws.amazon.com/connect/latest/APIReference/API_GetMetricData.html) for historical metrics.
+
+In a cell, you specify the data that you wish to display by using the `Reference` tag. The data can be a direct reference (i.e. data that is being drawn from Connect directly); it can be the result of a calculation (several metrics that have been somehow modified - see below); or it can be the name of an agent (see below). Note that cell data can also be static - you may want to display a heading for a column or description for a cell.
 
 #### Special note about SERVICE_LEVEL
 Thanks to `eaagastr` for pointing this out.
 
 SERVICE_LEVEL is an historical metric that requires an additional parameter: Threshold. This is because the metric is determining what the service level is of a queue and therefore needs the number of seconds that it should evaluate the service level over.
 
-For the time being, I've put a small hack into the code so that it doesn't throw an error when SERVICE_LEVEL is requested as a metric. At the top of `get-historical-metrics.py` you'll see a variable which is `ServiceLevelThreshold` and it is set to 60 (seconds). This is static across all queues - you can change this value (between 1 and 604800 inclusive) but you can't set it individually per queue.
+For the time being, there is a small hack into the code so that it doesn't throw an error when SERVICE_LEVEL is requested as a metric. At the top of `get-historical-metrics.py` you'll see a variable which is `ServiceLevelThreshold` and it is set to 60 (seconds). This is static across all queues - you can change this value (between 1 and 604800 inclusive) but you can't set it individually per queue.
 
-In future, this might change - so that you can specify a different threshold per queue. If this is of interest, send me a message.
+In future, this might change - so that you can specify a different threshold per queue. If this is of interest, create a GitHub issue.
 
 ### Calculations
 Calculations allow you to take metrics and perform simple mathematical operations on them. For example, you may have three queues and wish to display the total number of callers for all three queues. To do this, you could use the following snippet:
@@ -145,6 +179,8 @@ Rows:
       ThresholdReference: LongestWaitingWarning
 ```
 You can apply the threshold reference to any other cells even if they do not contain the data that is causing the breach of threshold. That way, you could turn a whole row or column yellow or red (the default colours) to highlight a threshold breach. Thresholds may also reference the output of calculations rather than raw data from Connect.
+
+In addition to `WarnAbove` and `AlertAbove` there are also `WarnBelow` and `AlertBelow` keywords. You may wish to create visible warnings and alerts when metrics are below a certain value. For example, you might want to know when there are less than a specific number of agents available to answer calls.
 
 ### Agent states
 Make sure that you define colours for each agent state that has been created in Connect. There are no default colours in the wallboard for each state so if a state is detected that doesn't have a colour, the default background colour applies.
@@ -210,7 +246,7 @@ Rows:
 ```
 This takes the list of agents from Connect and displays them without you needing to know the names in advanced. Make sure that the `First name` and `Last name` attributes for the agent are filled in as these are used in place of the `Text` tag to display the name of the agent. If you have more agents than cells available then additional agents are not displayed. If you have less agents than cells then the cells are left blank.
 
-It may not be useful to display the state of agents who are not currently logged into the system.
+It may not be useful to display the state of agents who are not currently logged into the system. Instead you might wish to only display the state of agents that are active.
 ```yaml
 Rows:
   - Row: 1
@@ -225,20 +261,62 @@ Rows:
       Text: Carlos
       Reference: =activeagents
 ```
-Here the cells only contain details of agents who are not in a `Logout` state.
+Here the cells will only contain details of agents who are not in a `Logout` state.
 
-### Configuring the Wallboard
+### Loading Wallboard Configuration Files 
 Once you have your YAML definition file you need to import it into the DynamoDB table. To do this you'll need the [import utility](https://github.com/aws-samples/aws-serverless-connect-wallboard/blob/master/wallboard-import.py):
 ```sh
 ./wallboard-import.py <definition file>
 ```
+### Calling the API
 Once imported you can call the API Gateway endpoint that the CloudFormation template configured for you. You can find this in the `Outputs` section of the CloudFormation stack.
 ```
-curl https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/wallboard?Wallboard=standard
+curl https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/stagename/wallboard?Wallboard=standard
 ```
 This example retrieves the wallboard called `standard` which is the name given to it by the `Identifier` tag in the definition file. You can have multiple definitions coexisting in the wallboard system as long as they have unique identifiers. This allows you to have a single set of data that is displayed differently in many locations. For example, you might have an overarching wallboard shown on a large display and also have less complex wallboards that show a subset of the data on agent desktops in a browser.
 
-To display the wallboard, you'll need to write a small piece of Javascript that embeds the wallboard table returned by API Gateway into a web page. Check out [this example page](https://github.com/aws-samples/aws-serverless-connect-wallboard/blob/master/wallboard-example.html) in this repo for a starting point. Note that you can use CSS to make additional changes to the appearance of the wallboard.
+By default the Lambda function that renders the wallboard returns a preformatted HTML table. To display this on your secreen, you'll need to write a small piece of Javascript that embeds the wallboard table returned by API Gateway into a web page. Check out [this example page](https://github.com/aws-samples/aws-serverless-connect-wallboard/blob/master/wallboard-example.html) in this repo for a starting point. Note that you can use CSS to make additional changes to the appearance of the wallboard.
+
+If you'd prefer to render your wallboard using a front-end framework you can request that the API returns a JSON structure instead.
+```
+curl https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/wallboard?Wallboard=standard&json=true
+```
+The structure returned will look like this (non-JSON comments embedded for clarity):
+```json
+{
+  "Settings": { # Settings "global" to this wallboard - hints for how to render but not prescriptive
+    "TextColour": "black", # Default text colour
+    "BackgroundColour": "white", # Default background colour
+    "FontSize": "15", # Default font size
+    "Font": "sans-serif", # Default font type
+    "AlertBackgroundColour": "red", # Colour for cells in "alert"
+    "WarningBackgroundColour": "yellow", # Colour for cells in "warn"
+    "AgentStateList": { # List of any custom agent states and associated colours
+      "Lunch": "yellow"
+    }
+  },
+  "AgentStates": { # List of current agent names and states
+    "Alice": "Lunch"
+  },
+  "WallboardData": { # Data for each cell of the wallboard
+    "R1C1": { # Row 1, Column 1
+      "Format": { # Formatting hints that may override the "global" settings
+        "BackgroundColour": "lightgreen",
+        "TextSize": "20"
+      },
+      "Text": "Agents Available" # Static text to display in the cell
+    },
+    "R2C1": {
+      "Format": {
+        "Colour": "blue"
+      },
+      "Metric": "AGENTS_AVAILABLE", # Name of the metric in this cell
+      "Value": "0" # Value for this cell
+    }
+  }
+}
+```
+It is up to you to determine the appropriate way to parse the data for your purposes but the simplest way is that the metrics are contained within a JSON object called 'WallboardData' and each cell is labelled `R<row number>C<column number>`. The formatting hints (colours and threshold alerts) can be used by you or ignored as you see fit.
 
 ### Wallboard Tuning
 You may wish to tune specific events in the wallboard system.

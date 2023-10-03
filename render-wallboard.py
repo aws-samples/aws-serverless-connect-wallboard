@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright 2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this
 # software and associated documentation files (the "Software"), to deal in the Software
@@ -19,29 +19,34 @@
 
 import boto3
 from boto3.dynamodb.conditions import Key,Attr
-from botocore.exceptions import ClientError
 import os
 import time
 import logging
 import string
 import re
+import json
 
 #
 # Things to configure
 #
-DDBTableName    = "ConnectWallboard"
-ConfigTimeout   = 300 # How long we wait before grabbing the config from the database
+DDBTableName    = os.environ.get('WallboardTable', 'ConnectWallboard')
+ConfigTimeout   = os.environ.get('ConfigTimeout', 300) # How long we wait before grabbing the config from the database
 RealtimeTimeout = 5 # How long before in between polling the real-time API
+Table           = boto3.resource('dynamodb').Table(DDBTableName)
+
+logging.basicConfig()
+Logger = logging.getLogger()
+Logger.setLevel(logging.WARNING)
 
 #
 # Sane defaults for new wallboards in case specific settings aren't given
 #
 DefaultSettings = {
-    "AlertBackgroundColour": "red", 
-    "WarningBackgroundColour": "yellow", 
-    "TextColour": "black", 
-    "Font": "sans-serif",
-    "BackgroundColour": "lightgrey"
+    'AlertBackgroundColour': 'red', 
+    'WarningBackgroundColour': 'yellow', 
+    'TextColour': 'black', 
+    'Font': 'sans-serif',
+    'BackgroundColour': 'lightgrey'
 }
 
 #
@@ -60,21 +65,29 @@ NextAgent       = 0
 SortedAgentList = []
 FullAgentNames  = {}
 
-Table           = ""
 Logger          = logging.getLogger()
 
+#
+# List of valid metrics we can retrieve
+#
 MetricUnitMapping = {
-    "AGENTS_AVAILABLE": "COUNT",
-    "AGENTS_ONLINE": "COUNT",
-    "AGENTS_ON_CALL": "COUNT",
-    "AGENTS_STAFFED": "COUNT",
-    "AGENTS_AFTER_CONTACT_WORK": "COUNT",
-    "AGENTS_NON_PRODUCTIVE": "COUNT",
-    "AGENTS_ERROR": "COUNT",
-    "CONTACTS_IN_QUEUE": "COUNT",
-    "OLDEST_CONTACT_AGE": "SECONDS",
-    "CONTACTS_SCHEDULED": "COUNT"                                 
+    'AGENTS_AVAILABLE': 'COUNT',
+    'AGENTS_ONLINE': 'COUNT',
+    'AGENTS_ON_CALL': 'COUNT',
+    'AGENTS_STAFFED': 'COUNT',
+    'AGENTS_AFTER_CONTACT_WORK': 'COUNT',
+    'AGENTS_NON_PRODUCTIVE': 'COUNT',
+    'AGENTS_ERROR': 'COUNT',
+    'CONTACTS_IN_QUEUE': 'COUNT',
+    'OLDEST_CONTACT_AGE': 'SECONDS',
+    'CONTACTS_SCHEDULED': 'COUNT'                                 
   }
+
+#
+# List of functions that can be used in calculations - probably not complete
+# so should be added to as necessary
+#
+FunctionList = ['round', 'int', 'float', 'min', 'max', 'sum', 'ord', 'pow']
 
 def GetConfiguration(WallboardName):
     global LastRun,ConfigTimeout,DDBTableName,Logger,Table,Settings,Cells,Thresholds,AgentStates,Calculations,DataSources
@@ -87,18 +100,18 @@ def GetConfiguration(WallboardName):
     if WallboardName not in Settings:
         LastRun = time.time()
         GetConfig = True
-        Logger.debug("No config loaded for "+WallboardName+" - retrieving")
+        Logger.info(f'No config loaded for {WallboardName} retrieving')
     else:
-        Logger.debug("Last run at "+str(LastRun)+", timeout is "+str(ConfigTimeout)+", now is "+str(time.time()))
+        Logger.info(f'Last run at {LastRun}, timeout is {ConfigTimeout}, now is {time.time()}')
     
         if time.time() > LastRun+ConfigTimeout:
             LastRun = time.time()
             GetConfig = True
-            Logger.debug("  Wallboard config needs refreshing")
+            Logger.info('  Wallboard config needs refreshing')
         else:
-            Logger.debug("  Within timeout period - no config refresh")
+            Logger.info('  Within timeout period - no config refresh')
     
-    if not GetConfig: return(True)
+    if not GetConfig: return True
 
     #
     # All relevant wallboard information (how it is to be formatted, threshold
@@ -106,14 +119,23 @@ def GetConfiguration(WallboardName):
     # wallboard.
     #
     try:
-        Response = Table.query(KeyConditionExpression=Key("Identifier").eq(WallboardName))
-    except ClientError as e:
-        Logger.error("DynamoDB error: "+e.response["Error"]["Message"])
-        return(False)
+        Response = Table.query(KeyConditionExpression=Key('Identifier').eq(WallboardName))
+        ConfigList = Response
+    except Exception as e:
+        Logger.error(f'DynamoDB error: {e}')
+        return False
 
-    if len(Response["Items"]) == 0:
-        Logger.error("Did not get any configuration for wallboard "+WallboardName)
-        return(False)
+    if len(Response['Items']) == 0:
+        Logger.error(f'Did not get any configuration for wallboard {WallboardName}')
+        return False
+
+    while 'LastEvaluatedKey' in Response:
+        try:
+            Response = Table.query(ExclusiveStartKey=response['LastEvaluatedKey'])
+            ConfigList.update(Response)
+        except Exception as e:
+            Logger.error(f'DynamoDB error: {e}')
+            break
 
     LocalSettings     = DefaultSettings.copy()
     LocalThresholds   = {}
@@ -121,38 +143,38 @@ def GetConfiguration(WallboardName):
     LocalAgentStates  = {}
     LocalCalculations = {}
     LocalDataSources  = {}
-    for Item in Response["Items"]:
-        if Item["RecordType"] == "Settings":
+    for Item in ConfigList['Items']:
+        if Item['RecordType'] == 'Settings':
             for Config in Item:
                 LocalSettings[Config] = Item[Config]
-        elif Item["RecordType"][:11] == "Calculation":
-            if "Formula" not in Item:
-                Logger.warning("Formula not set for "+Item["RecordType"]+" in wallboard " +WallboardName+" - ignored")
+        elif Item['RecordType'][:11] == 'Calculation':
+            if 'Formula' not in Item:
+                Logger.warning(f'Formula not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
-            LocalCalculations[Item["Name"]] = Item["Formula"]
-        elif Item["RecordType"][:4] == "Cell":
-            if "Address" not in Item:
-                Logger.warning("Cell address not set for "+Item["RecordType"]+" in wallboard "+WallboardName+" - ignored")
+            LocalCalculations[Item['Name']] = Item['Formula']
+        elif Item['RecordType'][:4] == 'Cell':
+            if 'Address' not in Item:
+                Logger.warning(f'Cell address not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
-            LocalCells[Item["Address"]] = Item
-        elif Item["RecordType"][:9] == "Threshold":
-            if "Name" not in Item:
-                Logger.warning("Threshold name not set for "+Item["RecordType"]+" in wallboard "+WallboardName+" - ignored")
+            LocalCells[Item['Address']] = Item
+        elif Item['RecordType'][:9] == 'Threshold':
+            if 'Name' not in Item:
+                Logger.warning(f'Threshold name not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
-            LocalThresholds[Item["Name"]] = Item
-        elif Item["RecordType"][:10] == "AgentState":
-            if "StateName" not in Item:
-                Logger.warning("Agent state name not set for "+Item["RecordType"]+" in wallboard "+WallboardName+" - ignored")
+            LocalThresholds[Item['Name']] = Item
+        elif Item['RecordType'][:10] == 'AgentState':
+            if 'StateName' not in Item:
+                Logger.warning(f'Agent state name not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
-            LocalAgentStates[Item["StateName"]] = Item["BackgroundColour"]
-        elif Item["RecordType"][:10] == "DataSource":
-            if "Name" not in Item:
-                Logger.warning("Data source reference not set for "+Item["RecordType"]+" in wallboard "+WallboardName+" - ignored")
+            LocalAgentStates[Item['StateName']] = Item['BackgroundColour']
+        elif Item['RecordType'][:10] == 'DataSource':
+            if 'Name' not in Item:
+                Logger.warning(f'Data source reference not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
             
-            Metric = Item["Reference"].split(":")[2]
+            Metric = Item['Reference'].split(':')[2]
             if Metric not in MetricUnitMapping: continue # Ignore non real-time metrics
-            LocalDataSources[Item["Name"]] = Item["Reference"]
+            LocalDataSources[Item['Name']] = Item['Reference']
 
     Settings[WallboardName]     = LocalSettings
     Cells[WallboardName]        = LocalCells
@@ -161,7 +183,7 @@ def GetConfiguration(WallboardName):
     Calculations[WallboardName] = LocalCalculations
     DataSources[WallboardName]  = LocalDataSources
     
-    return(True)
+    return True
 
 def GetData():
     global Logger,Data,NextAgent,SortedAgentList,FullAgentNames
@@ -177,21 +199,30 @@ def GetData():
     # details.
     #
     try:
-        Response = Table.query(KeyConditionExpression=Key("Identifier").eq("Data"))
-    except ClientError as e:
-        Logger.error("DynamoDB error: "+e.response["Error"]["Message"])
+        Response = Table.query(KeyConditionExpression=Key('Identifier').eq('Data'))
+        AllData = Response
+    except Exception as e:
+        Logger.error(f'DynamoDB error: {e}')
         return
     
-    if len(Response["Items"]) == 0:
-        Logger.error("Did not get any data from DynamoDB")
+    if len(Response['Items']) == 0:
+        Logger.error('Did not get any data from DynamoDB')
         return
 
-    for Item in Response["Items"]:
-        Data[Item["RecordType"]] = Item["Value"]
-        if "AgentARN" in Item:
-            SortedAgentList.append(Item["RecordType"])
-            if "FullAgentName" in Item:
-                FullAgentNames[Item["RecordType"]] = Item["FullAgentName"]
+    while 'LastEvaluatedKey' in Response:
+        try:
+            Response = Table.query(ExclusiveStartKey=response['LastEvaluatedKey'])
+            AllData.update(Response)
+        except Exception as e:
+            Logger.error(f'DynamoDB error: {e}')
+            break
+
+    for Item in AllData['Items']:
+        Data[Item['RecordType']] = Item['Value']
+        if 'AgentARN' in Item:
+            SortedAgentList.append(Item['RecordType'])
+            if 'FullAgentName' in Item:
+                FullAgentNames[Item['RecordType']] = Item['FullAgentName']
         
     #
     # We want the agents in alphabetical order
@@ -201,16 +232,16 @@ def GetData():
 def StoreMetric(ConnectARN, QueueARN, MetricName, Value):
     global DataSources,Data,Logger
 
-    SourceString = ConnectARN+":"+QueueARN+":"+MetricName
+    SourceString = f'{ConnectARN}:{QueueARN}:{MetricName}'
 
     for Wallboard in DataSources:
         for Source in DataSources[Wallboard]:
             if DataSources[Wallboard][Source] == SourceString:
                 Data[Source] = str(int(Value))
-                Logger.debug("Storing "+Data[Source]+" in "+Source)
+                Logger.info(f'Storing {Data[Source]} in {Source}')
                 return
 
-    Logger.warning("Could not find "+SourceString+" in DataSources")
+    Logger.warning(f'Could not find {SourceString} in DataSources')
 
 def GetRealtimeData():
     global Logger,LastRealtimeRun,Data,DataSources,MetricUnitMapping
@@ -218,12 +249,12 @@ def GetRealtimeData():
     #
     # We only want to poll the real-time API every so often.
     #
-    Logger.debug("Last real-time poll at "+str(LastRealtimeRun)+", timeout is "+str(RealtimeTimeout)+", now is "+str(time.time()))
+    Logger.info(f'Last real-time poll at {LastRealtimeRun}, timeout is {RealtimeTimeout}, now is {time.time()}')
     
     if time.time() < LastRealtimeRun+RealtimeTimeout: return
     LastRealtimeRun = time.time()
 
-    Connect = boto3.client("connect")
+    Connect = boto3.client('connect')
     
     #
     # Even though data sources are defined per wallboard we will always retrieve
@@ -234,19 +265,19 @@ def GetRealtimeData():
     ConnectList = {}
     for WallboardName in DataSources:
         for Item in DataSources[WallboardName]:
-            if Item not in Data: Data[Item] = "0"
+            if Item not in Data: Data[Item] = '0'
 
-            (ConnectARN,QueueARN,Metric) = DataSources[WallboardName][Item].split(":")
+            (ConnectARN,QueueARN,Metric) = DataSources[WallboardName][Item].split(':')
  
             if ConnectARN not in ConnectList: ConnectList[ConnectARN] = {}
             if QueueARN not in ConnectList[ConnectARN]: ConnectList[ConnectARN][QueueARN] = []
-            ConnectList[ConnectARN][QueueARN].append({"Name":Metric, "Unit":MetricUnitMapping[Metric]})
+            ConnectList[ConnectARN][QueueARN].append({'Name':Metric, 'Unit':MetricUnitMapping[Metric]})
 
     #
     # Now call the API for each Connect instance we're interested in.
     #
     for Instance in ConnectList:
-        Logger.debug("Retrieving real-time data from "+Instance)
+        Logger.info(f'Retrieving real-time data from {Instance}')
         
         MetricList = []
         for Queue in ConnectList[Instance]:
@@ -255,54 +286,55 @@ def GetRealtimeData():
         try:
             Response = Connect.get_current_metric_data(
                            InstanceId=Instance,
-                           Groupings=["QUEUE"],
-                           Filters={"Queues":list(ConnectList[Instance].keys())},
+                           Groupings=['QUEUE'],
+                           Filters={'Queues':list(ConnectList[Instance].keys())},
                            CurrentMetrics=MetricList)
         except Exception as e:
-            Logger.error("Failed to get real-time data: "+str(e))
+            Logger.error(f'Failed to get real-time data: {e}')
             continue
 
-        if "MetricResults" not in Response: continue
-        for Collection in Response["MetricResults"]:
-            QueueARN   = Collection["Dimensions"]["Queue"]["Id"]
+        if 'MetricResults' not in Response: continue
+        for Collection in Response['MetricResults']:
+            QueueARN   = Collection['Dimensions']['Queue']['Id']
 
-            for Metric in Collection["Collections"]:
-                MetricName  = Metric["Metric"]["Name"]
-                MetricValue = Metric["Value"]
+            for Metric in Collection['Collections']:
+                MetricName  = Metric['Metric']['Name']
+                MetricValue = Metric['Value']
                 StoreMetric(Instance, QueueARN, MetricName, MetricValue)
 
 def DoCalculation(WallboardName, Reference):
-    global Logger,Data,Calculations
+    global Logger,Data,Calculations,FunctionList
     
-    Result = "0" # All values are stored as strings when they come out of DDB
+    Result = '0' # All values are stored as strings when they come out of DDB
 
     #
     # Split the calculation based on mathemetical operators
     #
-    CalcArray = re.split("(\+|\*|\-|\/|\(|\))", Calculations[WallboardName][Reference])
+    CalcArray = re.split('(\+|\*|\-|\/|\(|\)|,)', Calculations[WallboardName][Reference])
 
     # Substitute in the values for the labels in the calculation
     #
     Index = 0
     for Index in range(0, len(CalcArray)):
         if CalcArray[Index] in string.punctuation: continue
+        if CalcArray[Index] in FunctionList: continue
         if CalcArray[Index][0] in string.digits: continue
     
         if CalcArray[Index] in Data:
             CalcArray[Index] = Data[CalcArray[Index]]
         else:
-            Logger.warning("Calc: Could not find reference "+CalcArray[Index])
-            CalcArray[Index] = "0"
+            Logger.warning(f'Calc: Could not find reference {CalcArray[Index]}')
+            CalcArray[Index] = '0'
 
-    CalcString = "".join(CalcArray)
-    Logger.debug("Calculation for "+Reference+": "+Calculations[WallboardName][Reference]+" -> "+CalcString)
+    CalcString = ''.join(CalcArray)
+    Logger.info(f'Calculation for {Reference}: {Calculations[WallboardName][Reference]} -> {CalcString}')
     
     try:
         Result = str(eval(CalcString))
     except Exception as e:
-        Logger.error("Could not eval "+Reference+" ["+Calculations[WallboardName][Reference]+"] -> ["+CalcString+"] "+str(e))
+        Logger.error(f'Could not eval {Reference}: {Calculations[WallboardName][Reference]} -> {CalcString} : {e}')
         
-    return(Result)
+    return Result
     
 def CheckThreshold(WallboardName, ThresholdReference):
     global Settings,Data,Thresholds,Logger,Calculations
@@ -313,36 +345,45 @@ def CheckThreshold(WallboardName, ThresholdReference):
     # displayed). We have warning thresholds (above and below) and error
     # thresholds (above and below).
     #
-    Colour = ""
+    Colour         = ''
+    ThresholdLevel = 'Normal' # Additional flag for JSON data return
 
     if ThresholdReference not in Thresholds[WallboardName]:
-        Logger.warning("Threshold reference "+ThresholdReference+" does not exist for wallboard "+WallboardName)
-        return(Colour)
+        Logger.warning(f'Threshold reference {ThresholdReference} does not exist for wallboard {WallboardName}')
+        return Colour, ThresholdLevel
 
     Threshold = Thresholds[WallboardName][ThresholdReference]
-    if "Reference" not in Threshold:
-        Logger.warning("No data reference present in threshold "+ThresholdReference+ "for wallboard "+WallboardName)
-        return(Colour)
+    if 'Reference' not in Threshold:
+        Logger.warning(f'No data reference present in threshold {ThresholdReference} for wallboard {WallboardName}')
+        return Colour, ThresholdLevel
 
-    if Threshold["Reference"] not in Data:
-        if Threshold["Reference"] in Calculations:
-            Data[Threshold["Reference"]] = DoCalculation(WallboardName, Threshold["Reference"])
+    if Threshold['Reference'] not in Data:
+        if Threshold['Reference'] in Calculations:
+            Data[Threshold['Reference']] = DoCalculation(WallboardName, Threshold['Reference'])
         else:
-            Logger.warning("Data reference "+Threshold["Reference"]+" in threshold "+ThresholdReference+" does not exist for wallboard "+WallboardName)
-            return(Colour)
+            Logger.warning(f'Data reference {Threshold["Reference"]} in threshold {ThresholdReference} does not exist for wallboard {WallboardName}')
+            return Colour, ThresholdLevel
 
-    if "WarnBelow" in Threshold:
-        if int(Data[Threshold["Reference"]]) < int(Threshold["WarnBelow"]): Colour = Settings[WallboardName]["WarningBackgroundColour"]
-    if "AlertBelow" in Threshold:
-        if int(Data[Threshold["Reference"]]) < int(Threshold["AlertBelow"]): Colour = Settings[WallboardName]["AlertBackgroundColour"]
-    if "WarnAbove" in Threshold:
-        if int(Data[Threshold["Reference"]]) > int(Threshold["WarnAbove"]): Colour = Settings[WallboardName]["WarningBackgroundColour"]
-    if "AlertAbove" in Threshold:
-        if int(Data[Threshold["Reference"]]) > int(Threshold["AlertAbove"]): Colour = Settings[WallboardName]["AlertBackgroundColour"]
+    if 'WarnBelow' in Threshold:
+        if int(Data[Threshold['Reference']]) < int(Threshold['WarnBelow']):
+             Colour = Settings[WallboardName]['WarningBackgroundColour']
+             ThresholdLevel = 'Warning'
+    if 'AlertBelow' in Threshold:
+        if int(Data[Threshold['Reference']]) < int(Threshold['AlertBelow']):
+             Colour = Settings[WallboardName]['AlertBackgroundColour']
+             ThresholdLevel = 'Alert'
+    if 'WarnAbove' in Threshold:
+        if int(Data[Threshold['Reference']]) > int(Threshold['WarnAbove']):
+             Colour = Settings[WallboardName]['WarningBackgroundColour']
+             ThresholdLevel = 'Warning'
+    if 'AlertAbove' in Threshold:
+        if int(Data[Threshold['Reference']]) > int(Threshold['AlertAbove']):
+             Colour = Settings[WallboardName]['AlertBackgroundColour']
+             ThresholdLevel = 'Alert'
 
-    return(Colour)
+    return Colour, ThresholdLevel
 
-def GetNextAgent(GetActive):
+def GetNextAgent(GetActive, JSONFlag=False):
     global SortedAgentList,NextAgent,FullAgentNames
     
     #
@@ -350,10 +391,15 @@ def GetNextAgent(GetActive):
     # function returns the names one-by-one so that the caller can fill in the
     # cells in the wallboard table.
     #
-    AgentName = ""
-    HTML      = ""
+    AgentName = ''
+    HTML      = ''
+    JSON      = {}
     
-    if NextAgent >= len(SortedAgentList): return(HTML, "") # No more agents - cell is blank
+    if NextAgent >= len(SortedAgentList): # No more agents to list
+        if JSONFlag:
+            return JSON, ''
+        else:
+            return HTML, ''
 
     if not GetActive: # Return the next agent whether active in the system or not
         AgentName = SortedAgentList[NextAgent]
@@ -361,7 +407,7 @@ def GetNextAgent(GetActive):
     else: # Return the next active agent
         while NextAgent < len(SortedAgentList):
             AgentState = Data[SortedAgentList[NextAgent]]
-            if len(AgentState) == 0 or AgentState == "Logout":
+            if len(AgentState) == 0 or AgentState == 'Logout':
                 NextAgent += 1
                 continue
             
@@ -369,13 +415,24 @@ def GetNextAgent(GetActive):
             NextAgent += 1
             break
         
-    if len(AgentName) == 0: return(HTML, "") # No agent found - cell is blank
+    if len(AgentName) == 0: # No agent found
+        if JSONFlag:
+            return JSON, ''
+        else:
+            return HTML, ''
     
-    if AgentName in FullAgentNames: # Just in case we didn't find a full name for this agent
-        HTML += "<div class=\"text\">"+FullAgentNames[AgentName]+"</div>"
-    HTML += "<div class=\"data\">"+Data[AgentName]+"</div>"
+    if JSONFlag:
+        if AgentName in FullAgentNames: # Just in case we didn't find a full name for this agent
+            JSON['FullAgentName'] = FullAgentNames[AgentName]
+        JSON['AgentState'] = Data[AgentName]
 
-    return(HTML, Data[AgentName]) # Return the state so we can set the cell background colour
+        return JSON, AgentName
+    else:
+        if AgentName in FullAgentNames: # Just in case we didn't find a full name for this agent
+            HTML += f'<div class="text">{FullAgentNames[AgentName]}</div>'
+        HTML += f'<div class="data">{Data[AgentName]}</div>'
+
+        return HTML, Data[AgentName] # Return the state so we can set the cell background colour
 
 def RenderCell(WallboardName, Row, Column):
     global AgentStates,Thresholds,Logger,Data,Calculations
@@ -387,29 +444,29 @@ def RenderCell(WallboardName, Row, Column):
     # to perform. Also need to ensure that thresholds are checked for numerical
     # values where present.
     #
-    Address      = "R"+str(Row)+"C"+str(Column)
-    HTML         = ""
-    AgentDetails = ""
+    Address      = f'R{Row}C{Column}'
+    HTML         = ''
+    AgentDetails = ''
     
-    if Address not in Cells[WallboardName]: return(HTML)
+    if Address not in Cells[WallboardName]: return HTML
     Cell = Cells[WallboardName][Address]
     LocalStates = AgentStates[WallboardName]
 
     Style = [] 
-    Style.append("border: 1px solid black; padding: 5px;")
-    if "TextColour" in Cell: Style.append("color: "+Cell["TextColour"]+";")
-    if "TextSize"   in Cell: Style.append("font-size: "+Cell["TextSize"]+"px;")
+    Style.append('border: 1px solid black; padding: 5px;')
+    if 'TextColour' in Cell: Style.append(f'color: {Cell["TextColour"]};')
+    if 'TextSize'   in Cell: Style.append(f'font-size: {Cell["TextSize"]}px;')
 
-    Background = ""
-    if "Reference" in Cell:
-        State = ""
-        if Cell["Reference"] in Calculations[WallboardName]: # We need to calculate this one
-            Data[Cell["Reference"]] = DoCalculation(WallboardName, Cell["Reference"])
-        elif Cell["Reference"].lower() in Data: # Data already exists
-            State = Data[Cell["Reference"]]
-        elif Cell["Reference"] == "=allagents": # Any agent at all
+    Background = ''
+    if 'Reference' in Cell:
+        State = ''
+        if Cell['Reference'] in Calculations[WallboardName]: # We need to calculate this one
+            Data[Cell['Reference']] = DoCalculation(WallboardName, Cell['Reference'])
+        elif Cell['Reference'].lower() in Data: # Data already exists
+            State = Data[Cell['Reference']]
+        elif Cell['Reference'] == '=allagents': # Any agent at all
             (AgentDetails, State) = GetNextAgent(False)
-        elif Cell["Reference"] == "=activeagents": # Active agents only
+        elif Cell['Reference'] == '=activeagents': # Active agents only
             (AgentDetails, State) = GetNextAgent(True)
 
         if len(State) > 0:
@@ -417,32 +474,32 @@ def RenderCell(WallboardName, Row, Column):
             if State in LocalStates:
                 Background = LocalStates[State]
 
-    if "ThresholdReference" in Cell:
-        NewBackground = CheckThreshold(WallboardName, Cell["ThresholdReference"])
+    if 'ThresholdReference' in Cell:
+        (NewBackground,Level) = CheckThreshold(WallboardName, Cell['ThresholdReference'])
         if len(NewBackground) > 0: Background = NewBackground
         
     if len(Background) == 0:
-        if "BackgroundColour" in Cell: Background = Cell["BackgroundColour"]
-    if len(Background) > 0: Style.append("background: "+Background+";")
+        if 'BackgroundColour' in Cell: Background = Cell['BackgroundColour']
+    if len(Background) > 0: Style.append(f'background: {Background};')
 
-    Tag = "R"+str(Row)+"C"+str(Column)
-    HTML += "<td label=\""+Tag+"\" class=\""+Tag+"\""
-    if "Rows"     in Cell: HTML += " rowspan=\""+Cell["Rows"]+"\""
-    if "Columns"  in Cell: HTML += " colspan=\""+Cell["Columns"]+"\""
-    if len(Style) > 0: HTML += " style=\""+" ".join(Style)+"\""
-    HTML += ">"
+    Tag = f'R{Row}C{Column}'
+    HTML += f'<td label="{Tag}" class="{Tag}"'
+    if 'Rows'     in Cell: HTML += f' rowspan="{Cell["Rows"]}"'
+    if 'Columns'  in Cell: HTML += f' colspan="{Cell["Columns"]}"'
+    if len(Style) > 0: HTML += f' style="{" ".join(Style)}"'
+    HTML += '>'
 
-    if "Text" in Cell: HTML += "<div class=\"text\">"+Cell["Text"]+"</div>"
-    if "Reference" in Cell:
-        if Cell["Reference"] in Data:
-            HTML += "<div class=\"data\">"+Data[Cell["Reference"]]+"</div>"
-        elif Cell["Reference"] == "=allagents" or Cell["Reference"] == "=activeagents":
+    if 'Text' in Cell: HTML += f'<div class="text">{Cell["Text"]}</div>'
+    if 'Reference' in Cell:
+        if Cell['Reference'] in Data:
+            HTML += f'<div class="data">{Data[Cell["Reference"]]}</div>'
+        elif Cell['Reference'] == '=allagents' or Cell['Reference'] == '=activeagents':
             HTML += AgentDetails
         else:
-            Logger.warning("Data reference "+Cell["Reference"]+" in cell "+Address+" does not exist for wallboard "+WallboardName)
+            Logger.warning(f'Data reference {Cell["Reference"]} in cell {Address} does not exist for wallboard {WallboardName}')
 
-    HTML += "</td>"
-    return(HTML)
+    HTML += '</td>'
+    return HTML
 
 def RenderHTML(WallboardName):
     global Settings
@@ -452,52 +509,143 @@ def RenderHTML(WallboardName):
     # according to the wallboard configuration.
     #
     LocalSettings = Settings[WallboardName]
-    HTML = ""
+    HTML = ''
 
-    HTML += "<table label=\"ConnectWallboard"+LocalSettings["Identifier"].replace(" ", "")+"\""
-    HTML += " style=\"border: 1px solid black; border-collapse: collapse; margin-left: auto; margin-right: auto; text-align: center;"
-    if "TextColour"       in LocalSettings: HTML += " color: "+LocalSettings["TextColour"]+";"
-    if "BackgroundColour" in LocalSettings: HTML += " background: "+LocalSettings["BackgroundColour"]+";"
-    if "TextSize"         in LocalSettings: HTML += " font-size: "+LocalSettings["TextSize"]+"px;"
-    if "Font"             in LocalSettings: HTML += " font-family: "+LocalSettings["Font"]+";"
-    HTML += "\" class=\"wallboard-"+WallboardName+"\">\n"
+    HTML += f'<table label="ConnectWallboard{LocalSettings["Identifier"].replace(" ", "")}"'
+    HTML += ' style="border: 1px solid black; border-collapse: collapse; margin-left: auto; margin-right: auto; text-align: center;'
+    if 'TextColour'       in LocalSettings: HTML += f' color: {LocalSettings["TextColour"]};'
+    if 'BackgroundColour' in LocalSettings: HTML += f' background: {LocalSettings["BackgroundColour"]};'
+    if 'TextSize'         in LocalSettings: HTML += f' font-size: {LocalSettings["TextSize"]}px;'
+    if 'Font'             in LocalSettings: HTML += f' font-family: {LocalSettings["Font"]};'
+    HTML += f'" class="wallboard-{WallboardName}">\n'
 
-    for Row in range(1, int(LocalSettings["Rows"])+1):
-        HTML += " <tr>"
-        for Column in range(1, int(LocalSettings["Columns"])+1):
+    for Row in range(1, int(LocalSettings['Rows'])+1):
+        HTML += ' <tr>'
+        for Column in range(1, int(LocalSettings['Columns'])+1):
             HTML += RenderCell(WallboardName, Row, Column)
-        HTML += "</tr>\n"
+        HTML += '</tr>\n'
 
-    HTML += "</table>\n"
+    HTML += '</table>\n'
 
-    return(HTML)
+    return HTML
+
+def GetRawCellData(WallboardName, Row, Column):
+    global AgentStates,Thresholds,Logger,Data,Calculations
+    
+    #
+    # As with the HTML render, Given a particular cell, get the data from the
+    # appropriate source but return it as a dictionary.
+    #
+    Address = f'R{Row}C{Column}'
+    JSON = {}
+    
+    if Address not in Cells[WallboardName]: return JSON
+    Cell = Cells[WallboardName][Address]
+
+    #
+    # Agent state is sent back in a different place for a JSON return so we
+    # don't do that here.
+    #
+    if 'Reference' in Cell:
+        if Cell['Reference'] == '=allagents' or Cell['Reference'] == '=activeagents':
+            return JSON
+
+    #
+    # As with the whole table the front-end process can ignore the formatting "hints".
+    #
+    Format = {}
+    if 'BackgroundColour' in Cell: Format['BackgroundColour'] = Cell['BackgroundColour']
+    if 'TextColour' in Cell:       Format['Colour'] = Cell['TextColour']
+    if 'TextSize'   in Cell:       Format['TextSize'] = Cell['TextSize']
+
+    if 'Reference' in Cell:
+        if Cell['Reference'] in Calculations[WallboardName]: # We need to calculate this one
+            Data[Cell['Reference']] = DoCalculation(WallboardName, Cell['Reference'])
+
+    if 'ThresholdReference' in Cell:
+        (Background,Level) = CheckThreshold(WallboardName, Cell['ThresholdReference'])
+        if len(Background) > 0: Format['BackgroundColour'] = Background
+        JSON['Threshold'] = Level
+        
+    if 'Rows'     in Cell: Format['RowSpan'] = Cell['Rows']
+    if 'Columns'  in Cell: Format['ColSpan'] = Cell['Columns']
+
+    JSON['Format'] = Format
+
+    if 'Text' in Cell: JSON['Text'] = Cell['Text']
+    if 'Reference' in Cell:
+        JSON['Metric'] = Cell['Reference']
+        if Cell['Reference'] in Data:
+            JSON['Value'] = Data[Cell['Reference']]
+
+    return JSON
+    
+def RenderJSON(WallboardName):
+    global Settings
+
+    #
+    # Build a dictionary with all of the data in it - basically the same as
+    # the HTML table but in JSON so that the front end can render the data
+    # however it likes.
+    #
+    LocalSettings = Settings[WallboardName]
+    JSON = {}
+
+    #
+    # The settings provided are for appearance only so the front end can
+    # ignore these and render the data in whatever format is appropriate.
+    #
+    JSON['Settings'] = {}
+    if 'TextColour'              in LocalSettings: JSON['Settings']['TextColour'] = LocalSettings['TextColour']
+    if 'BackgroundColour'        in LocalSettings: JSON['Settings']['BackgroundColour'] = LocalSettings['BackgroundColour']
+    if 'TextSize'                in LocalSettings: JSON['Settings']['FontSize'] = LocalSettings['TextSize']
+    if 'Font'                    in LocalSettings: JSON['Settings']['Font'] = LocalSettings['Font']
+    if 'AlertBackgroundColour'   in LocalSettings: JSON['Settings']['AlertBackgroundColour'] = LocalSettings['AlertBackgroundColour']
+    if 'WarningBackgroundColour' in LocalSettings: JSON['Settings']['WarningBackgroundColour'] = LocalSettings['WarningBackgroundColour']
+    JSON['Settings']['AgentStateList'] = AgentStates[WallboardName]
+
+    #
+    # Get all the agent states.
+    #
+    JSON['AgentStates'] = {}
+    (AgentState,AgentName) = GetNextAgent(False, JSONFlag=True)
+    while len(AgentName) > 0:
+        JSON['AgentStates'][AgentName] = AgentState
+        (AgentState,AgentName) = GetNextAgent(False, JSONFlag=True)
+
+    #
+    # Now the rest of the data for this wallboard.
+    #
+    JSON['WallboardData'] = {}
+    for Row in range(1, int(LocalSettings['Rows'])+1):
+        for Column in range(1, int(LocalSettings['Columns'])+1):
+            CellData = GetRawCellData(WallboardName, Row, Column)
+            if len(CellData): JSON['WallboardData'][f'R{Row}C{Column}'] = CellData
+
+    return json.dumps(JSON)
 
 def lambda_handler(event, context):
-    global Table,DDBTableName,Logger
-    
-    logging.basicConfig()
-    Logger.setLevel(logging.INFO)
-    
-    if os.environ.get("WallboardTable") is not None: DDBTableName  = os.environ.get("WallboardTable")
-    if os.environ.get("ConfigTimeout")  is not None: ConfigTimeout = os.environ.get("ConfigTimeout")
-    
-    Table = boto3.resource("dynamodb").Table(DDBTableName)
     GetData()
 
     Response = {}
-    Response["statusCode"] = 200
-    Response["headers"]    = {"Access-Control-Allow-Origin": "*"}
+    Response['statusCode'] = 200
+    Response['headers']    = {'Access-Control-Allow-Origin': '*'}
 
-    if str(type(event["queryStringParameters"])).find("dict") == -1 or "Wallboard" not in event["queryStringParameters"]:
-        Response["body"] = "<div class=\"error\">No wallboard name specified</div>"
-        return(Response)
+    if str(type(event['queryStringParameters'])).find('dict') == -1 or 'Wallboard' not in event['queryStringParameters']:
+        Response['body'] = '<div class="error">No wallboard name specified</div>'
+        return Response
 
-    WallboardName = event["queryStringParameters"]["Wallboard"]
+    WallboardName = event['queryStringParameters']['Wallboard']
     if GetConfiguration(WallboardName):
         GetRealtimeData()
-        HTML = RenderHTML(WallboardName)
-    else:
-        HTML = "<div class=\"error\">Wallboard "+WallboardName+" not found</div>"
 
-    Response["body"] = HTML
-    return(Response)
+        JSONFlag = event['queryStringParameters'].get('json')
+        if JSONFlag:
+            OutputData = RenderJSON(WallboardName)
+        else:
+            OutputData = RenderHTML(WallboardName)
+    else:
+        OutputData = f'<div class="error">Wallboard {WallboardName} not found</div>'
+
+    Response['body'] = OutputData
+    return Response

@@ -1,7 +1,7 @@
-AWSTemplateFormatVersion: "2010-09-09"
+AWSTemplateFormatVersion: 2010-09-09
 
 #
-# Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this
 # software and associated documentation files (the "Software"), to deal in the Software
@@ -58,7 +58,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
@@ -71,7 +71,7 @@ Resources:
       Policies:
         - PolicyName: DynamoDBPolicy
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Action:
                 - dynamodb:Query
@@ -79,7 +79,7 @@ Resources:
                 Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DDBTable}"
         - PolicyName: ConnectPolicy
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Action:
                 - connect:GetCurrentMetricData
@@ -90,7 +90,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
@@ -103,7 +103,7 @@ Resources:
       Policies:
         - PolicyName: DynamoDBPolicy
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Action:
                 - dynamodb:Scan
@@ -112,7 +112,7 @@ Resources:
                 Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DDBTable}"
         - PolicyName: ConnectPolicy
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Action:
                 - connect:GetMetricData
@@ -123,7 +123,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: "2012-10-17"
+        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
@@ -136,7 +136,7 @@ Resources:
       Policies:
         - PolicyName: DynamoDBPolicy
           PolicyDocument:
-            Version: "2012-10-17"
+            Version: 2012-10-17
             Statement:
               - Action:
                 - dynamodb:Scan
@@ -166,7 +166,7 @@ Resources:
       Description: "Connect wallboard rendering function"
       Handler: "render-wallboard.lambda_handler"
       Role: !GetAtt LambdaRenderRole.Arn
-      Runtime: "python3.9"
+      Runtime: python3.11
       Timeout: 20
       Environment:
         Variables:
@@ -190,7 +190,7 @@ Resources:
       Description: "Connect wallboard agent event processing"
       Handler: "process-agent-event.lambda_handler"
       Role: !GetAtt LambdaAgentRole.Arn
-      Runtime: "python3.9"
+      Runtime: python3.11
       Timeout: 20
       Environment:
         Variables:
@@ -216,14 +216,14 @@ Resources:
       Description: "Connect wallboard historical metrics data retrieval"
       Handler: "get-historical-metrics.lambda_handler"
       Role: !GetAtt LambdaHistoricalRole.Arn
-      Runtime: "python3.9"
+      Runtime: python3.11
       Timeout: 20
       Environment:
         Variables:
           WallboardTable: !Ref DDBTable
 
   HistoricalEvent:
-    Type: "AWS::Events::Rule"
+    Type: AWS::Events::Rule
     DependsOn: LambdaHistorical
     Properties:
       Name: "Connect-Wallboard-Historical-Collection"
