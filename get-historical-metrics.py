@@ -28,7 +28,7 @@ import datetime
 # Things to configure
 #
 DDBTableName          = os.environ.get('WallboardTable', 'ConnectWallboard')
-ConfigTimeout         = os.environ.get('ConfigTimeout', 300) # How long we wait before grabbing the config from the database
+ConfigTimeout         = int(os.environ.get('ConfigTimeout', 300)) # How long we wait before grabbing the config from the database
 ServiceLevelThreshold = 60  # See note in README.md
 MaxItemsPerAPICall    = 100 # Maximum number of metrics returned from Connect
 Table                 = boto3.resource('dynamodb').Table(DDBTableName)
