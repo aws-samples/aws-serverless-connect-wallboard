@@ -30,7 +30,7 @@ import json
 # Things to configure
 #
 DDBTableName    = os.environ.get('WallboardTable', 'ConnectWallboard')
-ConfigTimeout   = os.environ.get('ConfigTimeout', 300) # How long we wait before grabbing the config from the database
+ConfigTimeout   = int(os.environ.get('ConfigTimeout', 300)) # How long we wait before grabbing the config from the database
 RealtimeTimeout = 5 # How long before in between polling the real-time API
 Table           = boto3.resource('dynamodb').Table(DDBTableName)
 
