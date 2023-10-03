@@ -154,6 +154,7 @@ Rows:
       Text: Total
       Reference: TotalCallersWaiting
 ```
+Note that simple mathematical functions such as `int()`, `round()`, `min()` and `max()` are supported in calculations.
 
 ### Thresholds
 Setting thresholds lets you change the background colour of a cell based on the value in that cell or in another cell. You can use this to highlight when (for example) to warn you before a SLA is breached (say, when the maximum waiting time is over two minutes) by setting a threshold at one minute using the `WarnAbove` value and another threshold at two miuntes to show the breach using the `AlertAbove` value.
