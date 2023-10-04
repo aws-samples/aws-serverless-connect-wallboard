@@ -81,6 +81,21 @@ def lambda_handler(event, context):
             AgentName = f'{AgentEvent["CurrentAgentSnapshot"]["Configuration"]["FirstName"]} {AgentEvent["CurrentAgentSnapshot"]["Configuration"]["LastName"]}'
             Username  = AgentEvent['CurrentAgentSnapshot']['Configuration']['Username']
 
+            if State == 'Available':
+                Contacts = AgentEvent["CurrentAgentSnapshot"]["Contacts"]
+
+                if Contacts:
+                    for Contact in Contacts:
+                        ContactState = Contact['State']
+                        if ContactState == 'CONNECTED':
+                            State = 'On Contact'
+                        elif ContactState == 'CONNECTING':
+                            State = 'On Contact'
+                        else:
+                            State = 'After Call Work'
+                else:
+                    State = 'Available'
+
             Logger.info(f'Agent: {AgentName}+ ({Username}) State: {State}')
             if len(AgentName) == 1: Logger.warning('Expected first and last name of agent but did not get it in the event.')
 
