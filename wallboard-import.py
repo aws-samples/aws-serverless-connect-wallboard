@@ -210,7 +210,7 @@ def SaveToDynamoDB(WallboardName,Records,RecordType):
     for Item in Records:
         Item['Identifier'] = {'S':WallboardName}
         if RecordType != 'Settings':
-            Item['RecordType'] = {'S':f'RecordType{Count}'}
+            Item['RecordType'] = {'S':f'{RecordType}{Count}'}
             Count += 1
         else:
             Item['RecordType'] = {'S':RecordType}
