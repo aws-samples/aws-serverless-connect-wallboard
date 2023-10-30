@@ -269,6 +269,7 @@ Once you have your YAML definition file you need to import it into the DynamoDB 
 ```sh
 ./wallboard-import.py <definition file>
 ```
+
 ### Calling the API
 Once imported you can call the API Gateway endpoint that the CloudFormation template configured for you. You can find this in the `Outputs` section of the CloudFormation stack.
 ```
@@ -324,7 +325,14 @@ You may wish to tune specific events in the wallboard system.
 
 Historical metrics are retrieved every minute. This is triggered by CloudWatch Events and can be changed by modifying the `Connect-Wallboard-Historical-Collection` rule. You can also modify the [CloudFormation template](https://github.com/aws-samples/aws-serverless-connect-wallboard/blob/master/wallboard-cfn.yaml) before deployment.
 
-The wallboard configuration is checked every 300 seconds (five minutes) by default. This means that when you update an existing wallboard configuration it may take up to five minutes for the changes to be visible. This can be changed by adding an environment variable called `ConfigTimeout` for the `Connect-Wallboard-Render` and `Connect-Wallboard-Historical-Metrics` Lambda functions and making the value the number of seconds the function should wait before checking for any updated configuration.
+The wallboard configuration is checked every 300 seconds (five minutes) by default. This means that when you update an existing wallboard configuration it may take up to five minutes for the changes to be visible. This can be changed by adding an environment variable called `ConfigTimeout` for the `Connect-Wallboard-Render` and `Connect-Wallboard-Historical-Metrics` Lambda functions and making the value the number of seconds the function should wait before checking for any updated configuration. A small value will mean the functions read from the DynamoDB table more often. This may increase the cost of the solution due to increase database table activity.
+
+### HTML Styles
+When rendered as a HTML table there are specific CSS stylesheet classes applied to each element. You can choose to override the default colours, fonts and formatting of the table if you wish.
+  - The table will have a stylesheet class of `wallboard-<wallboard name>`. For example, if your wallboard has a name of "primary" then the class will be `wallboard-primary`.
+  - Each cell has a class name which is related to the row and column of that cell. The first cell on the first row of the wallboard will have a class of `R1C1` while the third cell on the fourth row will be `R4C3`.
+
+Because each cell is formatted with an inline style, you may have to use the `!important` CSS property to override that style.
 
 ## License Summary
 
