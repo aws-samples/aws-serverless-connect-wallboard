@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this
 # software and associated documentation files (the "Software"), to deal in the Software
@@ -33,9 +33,7 @@ ServiceLevelThreshold = 60  # See note in README.md
 MaxItemsPerAPICall    = 100 # Maximum number of metrics returned from Connect
 Table                 = boto3.resource('dynamodb').Table(DDBTableName)
 
-logging.basicConfig()
-Logger = logging.getLogger()
-Logger.setLevel(logging.WARNING)
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
 #
 # Global state
@@ -80,16 +78,16 @@ def ProcessChunks(List, Size):
     return (List[Pos:Pos+Size] for Pos in range(0, len(List), Size))
 
 def GetConfiguration():
-    global LastRun,ConfigTimeout,DDBTableName,Logger,Table,DataSources,UnitMapping
+    global LastRun,ConfigTimeout,DDBTableName,Table,DataSources,UnitMapping
     
     #
     # We only want to retrieve the configuration for the wallboard if we haven't
     # retrieved it recently or it hasn't previously been loaded.
     #
-    Logger.info(f'Last run at {LastRun}, timeout is {ConfigTimeout}, now is {time.time()}')
+    logging.info(f'Last run at {LastRun}, timeout is {ConfigTimeout}, now is {time.time()}')
     
     if time.time() < LastRun+ConfigTimeout:
-        Logger.info('  Within timeout period - no config refresh')
+        logging.info('  Within timeout period - no config refresh')
         return
     LastRun = time.time()
 
@@ -103,25 +101,25 @@ def GetConfiguration():
         Response = Table.scan(FilterExpression=Expression)
         ConfigList = Response
     except Exception as e:
-        Logger.error(f'DynamoDB error: {e}')
+        logging.error(f'DynamoDB error: {e}')
         return False
 
     if len(Response['Items']) == 0:
-        Logger.error('Did not get any data sources')
+        logging.error('Did not get any data sources')
         return
 
     while 'LastEvaluatedKey' in Response:
         try:
-            Response = Table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+            Response = Table.scan(ExclusiveStartKey=Response['LastEvaluatedKey'])
             ConfigList.update(Response)
         except Exception as e:
-            Logger.error(f'DynamoDB error: {e}')
+            logging.error(f'DynamoDB error: {e}')
             break
 
     DataSources = {}
     for Item in ConfigList['Items']:
         if 'Name' not in Item:
-            Logger.warning(f'Data source reference not set for {Item["RecordType"]} - ignored')
+            logging.warning(f'Data source reference not set for {Item["RecordType"]} - ignored')
             continue
         
         Metric = Item['Reference'].split(':')[2]
@@ -131,20 +129,20 @@ def GetConfiguration():
     return
 
 def StoreMetric(ConnectARN, QueueARN, MetricName, Value):
-    global DataSources,Data,Logger
+    global DataSources,Data,logging
 
     SourceString = f'{ConnectARN}:{QueueARN}:{MetricName}'
 
     for Source in DataSources:
         if DataSources[Source] == SourceString:
             Data[Source] = str(int(Value))
-            Logger.info(f'Storing {Data[Source]} in {Source}')
+            logging.info(f'Storing {Data[Source]} in {Source}')
             return
 
-    Logger.warning(f'Could not find {SourceString} in DataSources')
+    logging.warning(f'Could not find {SourceString} in DataSources')
 
 def GetHistoricalData():
-    global Logger,LastRealtimeRun,Data,DataSources,MetricUnitMapping,Data
+    global logging,LastRealtimeRun,Data,DataSources,MetricUnitMapping,Data
 
     Connect = boto3.client('connect')
     
@@ -171,17 +169,17 @@ def GetHistoricalData():
     # Now call the API for each Connect instance we're interested in.
     #
     for Instance in ConnectList:
-        Logger.info(f'Retrieving historical data from {Instance}')
+        logging.info(f'Retrieving historical data from {Instance}')
         
         MetricList = []
         for Queue in ConnectList[Instance]:
             MetricList += ConnectList[Instance][Queue]
-        Logger.info(f'  Metrics: {MetricList}')
+        logging.info(f'  Metrics: {MetricList}')
  
         ChunkSize = int(MaxItemsPerAPICall/(len(MetricList)*len(ConnectList[Instance])))
 
         for QueueList in ProcessChunks(list(ConnectList[Instance].keys()), ChunkSize):
-            Logger.info(f'  Queues: {QueueList}')
+            logging.info(f'  Queues: {QueueList}')
             try:
                 Response = Connect.get_metric_data(
                                InstanceId=Instance,
@@ -191,7 +189,7 @@ def GetHistoricalData():
                                Filters={'Queues':QueueList},
                                HistoricalMetrics=MetricList)
             except Exception as e:
-                Logger.error(f'Failed to get historical data: {e}')
+                logging.error(f'Failed to get historical data: {e}')
                 continue
 
             if 'MetricResults' not in Response: continue
@@ -215,12 +213,9 @@ def WriteData():
         try:
             Table.put_item(TableName=DDBTableName, Item=DDBOutput)
         except Exception as e:
-            Logger.error(f'DynamoDB put error: {e}')
+            logging.error(f'DynamoDB put error: {e}')
 
- 
 def lambda_handler(event, context):
     GetConfiguration()
     GetHistoricalData()
     WriteData()
-
-    return

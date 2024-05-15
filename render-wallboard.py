@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this
 # software and associated documentation files (the "Software"), to deal in the Software
@@ -34,9 +34,7 @@ ConfigTimeout   = int(os.environ.get('ConfigTimeout', 300)) # How long we wait b
 RealtimeTimeout = 5 # How long before in between polling the real-time API
 Table           = boto3.resource('dynamodb').Table(DDBTableName)
 
-logging.basicConfig()
-Logger = logging.getLogger()
-Logger.setLevel(logging.WARNING)
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
 
 #
 # Sane defaults for new wallboards in case specific settings aren't given
@@ -65,8 +63,6 @@ NextAgent       = 0
 SortedAgentList = []
 FullAgentNames  = {}
 
-Logger          = logging.getLogger()
-
 #
 # List of valid metrics we can retrieve
 #
@@ -90,7 +86,7 @@ MetricUnitMapping = {
 FunctionList = ['round', 'int', 'float', 'min', 'max', 'sum', 'ord', 'pow']
 
 def GetConfiguration(WallboardName):
-    global LastRun,ConfigTimeout,DDBTableName,Logger,Table,Settings,Cells,Thresholds,AgentStates,Calculations,DataSources
+    global LastRun,ConfigTimeout,DDBTableName,Table,Settings,Cells,Thresholds,AgentStates,Calculations,DataSources
     
     #
     # We only want to retrieve the configuration for the wallboard if we haven't
@@ -100,16 +96,16 @@ def GetConfiguration(WallboardName):
     if WallboardName not in Settings:
         LastRun = time.time()
         GetConfig = True
-        Logger.info(f'No config loaded for {WallboardName} retrieving')
+        logging.info(f'No config loaded for {WallboardName} retrieving')
     else:
-        Logger.info(f'Last run at {LastRun}, timeout is {ConfigTimeout}, now is {time.time()}')
+        logging.info(f'Last run at {LastRun}, timeout is {ConfigTimeout}, now is {time.time()}')
     
         if time.time() > LastRun+ConfigTimeout:
             LastRun = time.time()
             GetConfig = True
-            Logger.info('  Wallboard config needs refreshing')
+            logging.info('  Wallboard config needs refreshing')
         else:
-            Logger.info('  Within timeout period - no config refresh')
+            logging.info('  Within timeout period - no config refresh')
     
     if not GetConfig: return True
 
@@ -122,19 +118,19 @@ def GetConfiguration(WallboardName):
         Response = Table.query(KeyConditionExpression=Key('Identifier').eq(WallboardName))
         ConfigList = Response
     except Exception as e:
-        Logger.error(f'DynamoDB error: {e}')
+        logging.error(f'DynamoDB error: {e}')
         return False
 
     if len(Response['Items']) == 0:
-        Logger.error(f'Did not get any configuration for wallboard {WallboardName}')
+        logging.error(f'Did not get any configuration for wallboard {WallboardName}')
         return False
 
     while 'LastEvaluatedKey' in Response:
         try:
-            Response = Table.query(ExclusiveStartKey=response['LastEvaluatedKey'])
+            Response = Table.query(ExclusiveStartKey=Response['LastEvaluatedKey'])
             ConfigList.update(Response)
         except Exception as e:
-            Logger.error(f'DynamoDB error: {e}')
+            logging.error(f'DynamoDB error: {e}')
             break
 
     LocalSettings     = DefaultSettings.copy()
@@ -149,27 +145,27 @@ def GetConfiguration(WallboardName):
                 LocalSettings[Config] = Item[Config]
         elif Item['RecordType'][:11] == 'Calculation':
             if 'Formula' not in Item:
-                Logger.warning(f'Formula not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
+                logging.warning(f'Formula not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
             LocalCalculations[Item['Name']] = Item['Formula']
         elif Item['RecordType'][:4] == 'Cell':
             if 'Address' not in Item:
-                Logger.warning(f'Cell address not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
+                logging.warning(f'Cell address not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
             LocalCells[Item['Address']] = Item
         elif Item['RecordType'][:9] == 'Threshold':
             if 'Name' not in Item:
-                Logger.warning(f'Threshold name not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
+                logging.warning(f'Threshold name not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
             LocalThresholds[Item['Name']] = Item
         elif Item['RecordType'][:10] == 'AgentState':
             if 'StateName' not in Item:
-                Logger.warning(f'Agent state name not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
+                logging.warning(f'Agent state name not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
             LocalAgentStates[Item['StateName']] = Item['BackgroundColour']
         elif Item['RecordType'][:10] == 'DataSource':
             if 'Name' not in Item:
-                Logger.warning(f'Data source reference not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
+                logging.warning(f'Data source reference not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
             
             Metric = Item['Reference'].split(':')[2]
@@ -186,7 +182,7 @@ def GetConfiguration(WallboardName):
     return True
 
 def GetData():
-    global Logger,Data,NextAgent,SortedAgentList,FullAgentNames
+    global Data,NextAgent,SortedAgentList,FullAgentNames
     
     SortedAgentList = []
     NextAgent       = 0
@@ -202,19 +198,19 @@ def GetData():
         Response = Table.query(KeyConditionExpression=Key('Identifier').eq('Data'))
         AllData = Response
     except Exception as e:
-        Logger.error(f'DynamoDB error: {e}')
+        logging.error(f'DynamoDB error: {e}')
         return
     
     if len(Response['Items']) == 0:
-        Logger.error('Did not get any data from DynamoDB')
+        logging.error('Did not get any data from DynamoDB')
         return
 
     while 'LastEvaluatedKey' in Response:
         try:
-            Response = Table.query(ExclusiveStartKey=response['LastEvaluatedKey'])
+            Response = Table.query(ExclusiveStartKey=Response['LastEvaluatedKey'])
             AllData.update(Response)
         except Exception as e:
-            Logger.error(f'DynamoDB error: {e}')
+            logging.error(f'DynamoDB error: {e}')
             break
 
     for Item in AllData['Items']:
@@ -230,7 +226,7 @@ def GetData():
     SortedAgentList.sort()
     
 def StoreMetric(ConnectARN, QueueARN, MetricName, Value):
-    global DataSources,Data,Logger
+    global DataSources,Data
 
     SourceString = f'{ConnectARN}:{QueueARN}:{MetricName}'
 
@@ -238,18 +234,18 @@ def StoreMetric(ConnectARN, QueueARN, MetricName, Value):
         for Source in DataSources[Wallboard]:
             if DataSources[Wallboard][Source] == SourceString:
                 Data[Source] = str(int(Value))
-                Logger.info(f'Storing {Data[Source]} in {Source}')
+                logging.info(f'Storing {Data[Source]} in {Source}')
                 return
 
-    Logger.warning(f'Could not find {SourceString} in DataSources')
+    logging.warning(f'Could not find {SourceString} in DataSources')
 
 def GetRealtimeData():
-    global Logger,LastRealtimeRun,Data,DataSources,MetricUnitMapping
+    global LastRealtimeRun,Data,DataSources,MetricUnitMapping
 
     #
     # We only want to poll the real-time API every so often.
     #
-    Logger.info(f'Last real-time poll at {LastRealtimeRun}, timeout is {RealtimeTimeout}, now is {time.time()}')
+    logging.info(f'Last real-time poll at {LastRealtimeRun}, timeout is {RealtimeTimeout}, now is {time.time()}')
     
     if time.time() < LastRealtimeRun+RealtimeTimeout: return
     LastRealtimeRun = time.time()
@@ -277,7 +273,7 @@ def GetRealtimeData():
     # Now call the API for each Connect instance we're interested in.
     #
     for Instance in ConnectList:
-        Logger.info(f'Retrieving real-time data from {Instance}')
+        logging.info(f'Retrieving real-time data from {Instance}')
         
         MetricList = []
         for Queue in ConnectList[Instance]:
@@ -290,7 +286,7 @@ def GetRealtimeData():
                            Filters={'Queues':list(ConnectList[Instance].keys())},
                            CurrentMetrics=MetricList)
         except Exception as e:
-            Logger.error(f'Failed to get real-time data: {e}')
+            logging.error(f'Failed to get real-time data: {e}')
             continue
 
         if 'MetricResults' not in Response: continue
@@ -303,7 +299,7 @@ def GetRealtimeData():
                 StoreMetric(Instance, QueueARN, MetricName, MetricValue)
 
 def DoCalculation(WallboardName, Reference):
-    global Logger,Data,Calculations,FunctionList
+    global Data,Calculations,FunctionList
     
     Result = '0' # All values are stored as strings when they come out of DDB
 
@@ -323,21 +319,21 @@ def DoCalculation(WallboardName, Reference):
         if CalcArray[Index] in Data:
             CalcArray[Index] = Data[CalcArray[Index]]
         else:
-            Logger.warning(f'Calc: Could not find reference {CalcArray[Index]}')
+            logging.warning(f'Calc: Could not find reference {CalcArray[Index]}')
             CalcArray[Index] = '0'
 
     CalcString = ''.join(CalcArray)
-    Logger.info(f'Calculation for {Reference}: {Calculations[WallboardName][Reference]} -> {CalcString}')
+    logging.info(f'Calculation for {Reference}: {Calculations[WallboardName][Reference]} -> {CalcString}')
     
     try:
         Result = str(eval(CalcString))
     except Exception as e:
-        Logger.error(f'Could not eval {Reference}: {Calculations[WallboardName][Reference]} -> {CalcString} : {e}')
+        logging.error(f'Could not eval {Reference}: {Calculations[WallboardName][Reference]} -> {CalcString} : {e}')
         
     return Result
     
 def CheckThreshold(WallboardName, ThresholdReference):
-    global Settings,Data,Thresholds,Logger,Calculations
+    global Settings,Data,Thresholds,Calculations
     
     #
     # For the given data reference, check for any threshold details and then
@@ -349,19 +345,19 @@ def CheckThreshold(WallboardName, ThresholdReference):
     ThresholdLevel = 'Normal' # Additional flag for JSON data return
 
     if ThresholdReference not in Thresholds[WallboardName]:
-        Logger.warning(f'Threshold reference {ThresholdReference} does not exist for wallboard {WallboardName}')
+        logging.warning(f'Threshold reference {ThresholdReference} does not exist for wallboard {WallboardName}')
         return Colour, ThresholdLevel
 
     Threshold = Thresholds[WallboardName][ThresholdReference]
     if 'Reference' not in Threshold:
-        Logger.warning(f'No data reference present in threshold {ThresholdReference} for wallboard {WallboardName}')
+        logging.warning(f'No data reference present in threshold {ThresholdReference} for wallboard {WallboardName}')
         return Colour, ThresholdLevel
 
     if Threshold['Reference'] not in Data:
         if Threshold['Reference'] in Calculations:
             Data[Threshold['Reference']] = DoCalculation(WallboardName, Threshold['Reference'])
         else:
-            Logger.warning(f'Data reference {Threshold["Reference"]} in threshold {ThresholdReference} does not exist for wallboard {WallboardName}')
+            logging.warning(f'Data reference {Threshold["Reference"]} in threshold {ThresholdReference} does not exist for wallboard {WallboardName}')
             return Colour, ThresholdLevel
 
     if 'WarnBelow' in Threshold:
@@ -435,7 +431,7 @@ def GetNextAgent(GetActive, JSONFlag=False):
         return HTML, Data[AgentName] # Return the state so we can set the cell background colour
 
 def RenderCell(WallboardName, Row, Column):
-    global AgentStates,Thresholds,Logger,Data,Calculations
+    global AgentStates,Thresholds,Data,Calculations
     
     #
     # Given a particular cell, figure out the right colours and cell contents.
@@ -496,7 +492,7 @@ def RenderCell(WallboardName, Row, Column):
         elif Cell['Reference'] == '=allagents' or Cell['Reference'] == '=activeagents':
             HTML += AgentDetails
         else:
-            Logger.warning(f'Data reference {Cell["Reference"]} in cell {Address} does not exist for wallboard {WallboardName}')
+            logging.warning(f'Data reference {Cell["Reference"]} in cell {Address} does not exist for wallboard {WallboardName}')
 
     HTML += '</td>'
     return HTML
@@ -530,7 +526,7 @@ def RenderHTML(WallboardName):
     return HTML
 
 def GetRawCellData(WallboardName, Row, Column):
-    global AgentStates,Thresholds,Logger,Data,Calculations
+    global AgentStates,Thresholds,Data,Calculations
     
     #
     # As with the HTML render, Given a particular cell, get the data from the
