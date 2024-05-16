@@ -34,7 +34,8 @@ ConfigTimeout   = int(os.environ.get('ConfigTimeout', 300)) # How long we wait b
 RealtimeTimeout = 5 # How long before in between polling the real-time API
 Table           = boto3.resource('dynamodb').Table(DDBTableName)
 
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 #
 # Sane defaults for new wallboards in case specific settings aren't given
@@ -96,16 +97,16 @@ def GetConfiguration(WallboardName):
     if WallboardName not in Settings:
         LastRun = time.time()
         GetConfig = True
-        logging.info(f'No config loaded for {WallboardName} retrieving')
+        logger.info(f'No config loaded for {WallboardName} retrieving')
     else:
-        logging.info(f'Last run at {LastRun}, timeout is {ConfigTimeout}, now is {time.time()}')
+        logger.info(f'Last run at {LastRun}, timeout is {ConfigTimeout}, now is {time.time()}')
     
         if time.time() > LastRun+ConfigTimeout:
             LastRun = time.time()
             GetConfig = True
-            logging.info('  Wallboard config needs refreshing')
+            logger.info('  Wallboard config needs refreshing')
         else:
-            logging.info('  Within timeout period - no config refresh')
+            logger.info('  Within timeout period - no config refresh')
     
     if not GetConfig: return True
 
@@ -118,11 +119,11 @@ def GetConfiguration(WallboardName):
         Response = Table.query(KeyConditionExpression=Key('Identifier').eq(WallboardName))
         ConfigList = Response
     except Exception as e:
-        logging.error(f'DynamoDB error: {e}')
+        logger.error(f'DynamoDB error: {e}')
         return False
 
     if len(Response['Items']) == 0:
-        logging.error(f'Did not get any configuration for wallboard {WallboardName}')
+        logger.error(f'Did not get any configuration for wallboard {WallboardName}')
         return False
 
     while 'LastEvaluatedKey' in Response:
@@ -130,7 +131,7 @@ def GetConfiguration(WallboardName):
             Response = Table.query(ExclusiveStartKey=Response['LastEvaluatedKey'])
             ConfigList.update(Response)
         except Exception as e:
-            logging.error(f'DynamoDB error: {e}')
+            logger.error(f'DynamoDB error: {e}')
             break
 
     LocalSettings     = DefaultSettings.copy()
@@ -145,27 +146,27 @@ def GetConfiguration(WallboardName):
                 LocalSettings[Config] = Item[Config]
         elif Item['RecordType'][:11] == 'Calculation':
             if 'Formula' not in Item:
-                logging.warning(f'Formula not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
+                logger.warning(f'Formula not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
             LocalCalculations[Item['Name']] = Item['Formula']
         elif Item['RecordType'][:4] == 'Cell':
             if 'Address' not in Item:
-                logging.warning(f'Cell address not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
+                logger.warning(f'Cell address not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
             LocalCells[Item['Address']] = Item
         elif Item['RecordType'][:9] == 'Threshold':
             if 'Name' not in Item:
-                logging.warning(f'Threshold name not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
+                logger.warning(f'Threshold name not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
             LocalThresholds[Item['Name']] = Item
         elif Item['RecordType'][:10] == 'AgentState':
             if 'StateName' not in Item:
-                logging.warning(f'Agent state name not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
+                logger.warning(f'Agent state name not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
             LocalAgentStates[Item['StateName']] = Item['BackgroundColour']
         elif Item['RecordType'][:10] == 'DataSource':
             if 'Name' not in Item:
-                logging.warning(f'Data source reference not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
+                logger.warning(f'Data source reference not set for {Item["RecordType"]} in wallboard {WallboardName} - ignored')
                 continue
             
             Metric = Item['Reference'].split(':')[2]
@@ -198,11 +199,11 @@ def GetData():
         Response = Table.query(KeyConditionExpression=Key('Identifier').eq('Data'))
         AllData = Response
     except Exception as e:
-        logging.error(f'DynamoDB error: {e}')
+        logger.error(f'DynamoDB error: {e}')
         return
     
     if len(Response['Items']) == 0:
-        logging.error('Did not get any data from DynamoDB')
+        logger.error('Did not get any data from DynamoDB')
         return
 
     while 'LastEvaluatedKey' in Response:
@@ -210,7 +211,7 @@ def GetData():
             Response = Table.query(ExclusiveStartKey=Response['LastEvaluatedKey'])
             AllData.update(Response)
         except Exception as e:
-            logging.error(f'DynamoDB error: {e}')
+            logger.error(f'DynamoDB error: {e}')
             break
 
     for Item in AllData['Items']:
@@ -234,10 +235,10 @@ def StoreMetric(ConnectARN, QueueARN, MetricName, Value):
         for Source in DataSources[Wallboard]:
             if DataSources[Wallboard][Source] == SourceString:
                 Data[Source] = str(int(Value))
-                logging.info(f'Storing {Data[Source]} in {Source}')
+                logger.info(f'Storing {Data[Source]} in {Source}')
                 return
 
-    logging.warning(f'Could not find {SourceString} in DataSources')
+    logger.warning(f'Could not find {SourceString} in DataSources')
 
 def GetRealtimeData():
     global LastRealtimeRun,Data,DataSources,MetricUnitMapping
@@ -245,7 +246,7 @@ def GetRealtimeData():
     #
     # We only want to poll the real-time API every so often.
     #
-    logging.info(f'Last real-time poll at {LastRealtimeRun}, timeout is {RealtimeTimeout}, now is {time.time()}')
+    logger.info(f'Last real-time poll at {LastRealtimeRun}, timeout is {RealtimeTimeout}, now is {time.time()}')
     
     if time.time() < LastRealtimeRun+RealtimeTimeout: return
     LastRealtimeRun = time.time()
@@ -273,7 +274,7 @@ def GetRealtimeData():
     # Now call the API for each Connect instance we're interested in.
     #
     for Instance in ConnectList:
-        logging.info(f'Retrieving real-time data from {Instance}')
+        logger.info(f'Retrieving real-time data from {Instance}')
         
         MetricList = []
         for Queue in ConnectList[Instance]:
@@ -286,7 +287,7 @@ def GetRealtimeData():
                            Filters={'Queues':list(ConnectList[Instance].keys())},
                            CurrentMetrics=MetricList)
         except Exception as e:
-            logging.error(f'Failed to get real-time data: {e}')
+            logger.error(f'Failed to get real-time data: {e}')
             continue
 
         if 'MetricResults' not in Response: continue
@@ -319,16 +320,16 @@ def DoCalculation(WallboardName, Reference):
         if CalcArray[Index] in Data:
             CalcArray[Index] = Data[CalcArray[Index]]
         else:
-            logging.warning(f'Calc: Could not find reference {CalcArray[Index]}')
+            logger.warning(f'Calc: Could not find reference {CalcArray[Index]}')
             CalcArray[Index] = '0'
 
     CalcString = ''.join(CalcArray)
-    logging.info(f'Calculation for {Reference}: {Calculations[WallboardName][Reference]} -> {CalcString}')
+    logger.info(f'Calculation for {Reference}: {Calculations[WallboardName][Reference]} -> {CalcString}')
     
     try:
         Result = str(eval(CalcString))
     except Exception as e:
-        logging.error(f'Could not eval {Reference}: {Calculations[WallboardName][Reference]} -> {CalcString} : {e}')
+        logger.error(f'Could not eval {Reference}: {Calculations[WallboardName][Reference]} -> {CalcString} : {e}')
         
     return Result
     
@@ -345,19 +346,19 @@ def CheckThreshold(WallboardName, ThresholdReference):
     ThresholdLevel = 'Normal' # Additional flag for JSON data return
 
     if ThresholdReference not in Thresholds[WallboardName]:
-        logging.warning(f'Threshold reference {ThresholdReference} does not exist for wallboard {WallboardName}')
+        logger.warning(f'Threshold reference {ThresholdReference} does not exist for wallboard {WallboardName}')
         return Colour, ThresholdLevel
 
     Threshold = Thresholds[WallboardName][ThresholdReference]
     if 'Reference' not in Threshold:
-        logging.warning(f'No data reference present in threshold {ThresholdReference} for wallboard {WallboardName}')
+        logger.warning(f'No data reference present in threshold {ThresholdReference} for wallboard {WallboardName}')
         return Colour, ThresholdLevel
 
     if Threshold['Reference'] not in Data:
         if Threshold['Reference'] in Calculations:
             Data[Threshold['Reference']] = DoCalculation(WallboardName, Threshold['Reference'])
         else:
-            logging.warning(f'Data reference {Threshold["Reference"]} in threshold {ThresholdReference} does not exist for wallboard {WallboardName}')
+            logger.warning(f'Data reference {Threshold["Reference"]} in threshold {ThresholdReference} does not exist for wallboard {WallboardName}')
             return Colour, ThresholdLevel
 
     if 'WarnBelow' in Threshold:
@@ -492,7 +493,7 @@ def RenderCell(WallboardName, Row, Column):
         elif Cell['Reference'] == '=allagents' or Cell['Reference'] == '=activeagents':
             HTML += AgentDetails
         else:
-            logging.warning(f'Data reference {Cell["Reference"]} in cell {Address} does not exist for wallboard {WallboardName}')
+            logger.warning(f'Data reference {Cell["Reference"]} in cell {Address} does not exist for wallboard {WallboardName}')
 
     HTML += '</td>'
     return HTML

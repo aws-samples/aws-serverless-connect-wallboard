@@ -27,7 +27,8 @@ import logging
 DDBTableName = os.environ.get('WallboardTable', 'ConnectWallboard')
 Table        = boto3.resource('dynamodb').Table(DDBTableName)
 
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def SaveStateToDDB(Username, FullAgentName, AgentARN, State):
     global Table
@@ -42,7 +43,7 @@ def SaveStateToDDB(Username, FullAgentName, AgentARN, State):
     try:
         Table.put_item(TableName=DDBTableName, Item=Data)
     except Exception as e:
-        logging.error(f'DDB put error: {e}')
+        logger.error(f'DDB put error: {e}')
 
 def SaveStateUsingARN(AgentARN, State):
     global Table
@@ -52,11 +53,11 @@ def SaveStateUsingARN(AgentARN, State):
         Expression = Attr('AgentARN').eq(AgentARN)
         Response = Table.scan(FilterExpression=Expression)
     except Exception as e:
-        logging.error(f'DDB scan error: {e}')
+        logger.error(f'DDB scan error: {e}')
         return
     
     if len(Response['Items']) > 0:
-        logging.info(f'AgentARN: {AgentARN} = {Response["Items"][0]["RecordType"]}')
+        logger.info(f'AgentARN: {AgentARN} = {Response["Items"][0]["RecordType"]}')
         SaveStateToDDB(Response['Items'][0]['RecordType'], Response['Items'][0]['FullAgentName'], AgentARN, State)
     
 def lambda_handler(event, context):
@@ -64,7 +65,7 @@ def lambda_handler(event, context):
         AgentEvent = json.loads(base64.b64decode(RawPayload['kinesis']['data']))
         EventType = AgentEvent['EventType']
         AgentARN = AgentEvent['AgentARN']
-        logging.info('Event type: {EventType} AgentARN: {AgentARN}')
+        logger.info('Event type: {EventType} AgentARN: {AgentARN}')
         
         if EventType == 'LOGIN': # We don't really need to do this but just in case...
             SaveStateUsingARN(AgentARN, 'Login')   
@@ -92,8 +93,8 @@ def lambda_handler(event, context):
                 else:
                     State = 'Available'
 
-            logging.info(f'Agent: {AgentName}+ ({Username}) State: {State}')
-            if len(AgentName) == 1: logging.warning('Expected first and last name of agent but did not get it in the event.')
+            logger.info(f'Agent: {AgentName}+ ({Username}) State: {State}')
+            if len(AgentName) == 1: logger.warning('Expected first and last name of agent but did not get it in the event.')
 
             SaveStateToDDB(Username, AgentName, AgentARN, State)
             continue
@@ -101,4 +102,4 @@ def lambda_handler(event, context):
             # Not sure what to do here yet
             continue
         
-        logging.warning(f'Unknown event type: {EventType}')
+        logger.warning(f'Unknown event type: {EventType}')
