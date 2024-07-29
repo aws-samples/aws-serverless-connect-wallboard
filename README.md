@@ -48,7 +48,7 @@ AgentStates:
 Rows:
   - Row: <Mandatory: row number for cells following>
     Cells:
-    - Cell: <Mandantory: cell number>
+    - Cell: <Mandatory: cell number>
       Text: <optional static text to go in cell>
       TextColor: <HTML color for text in this cell>
       BackgroundColor: <HTML background color for this cell>
