@@ -21,6 +21,7 @@ import boto3
 from boto3.dynamodb.conditions import Key,Attr
 import os
 import time
+import datetime
 import logging
 import string
 import re
@@ -489,7 +490,20 @@ def RenderCell(WallboardName, Row, Column):
     if 'Text' in Cell: HTML += f'<div class="text">{Cell["Text"]}</div>'
     if 'Reference' in Cell:
         if Cell['Reference'] in Data:
-            HTML += f'<div class="data">{Data[Cell["Reference"]]}</div>'
+            RawData = Data[Cell['Reference']]
+            if 'Format' in Cell:
+                if Cell['Format'] == 'Time':
+                    try:
+                        FinalData = str(datetime.timedelta(0, RawData))
+                    except:
+                        logger.error(f'Could not format {RawData} in cell {Address} as time - ignoring')
+                        FinalData = RawData
+                else:
+                    FinalData = RawData
+                    logger.warning(f'Format {Cell["Format"]} in cell {Address} for wallboard {WallboardName} is not supported')
+            else:
+                FinalData = RawData
+            HTML += f'<div class="data">{FinalData}</div>'
         elif Cell['Reference'] == '=allagents' or Cell['Reference'] == '=activeagents':
             HTML += AgentDetails
         else:

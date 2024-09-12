@@ -197,6 +197,7 @@ def GetCells(RowConfig):
             if 'ThresholdReference' in Cell: Item['ThresholdReference'] = {'S':Cell['ThresholdReference']}
             if 'Rows'               in Cell: Item['Rows']               = {'S':str(Cell['Rows'])}
             if 'Cells'              in Cell: Item['Cells']              = {'S':str(Cell['Cells'])}
+            if 'Format'             in Cell: Item['Format']             = {'S':str(Cell['Format'])}
 
             Cells.append(Item)
 

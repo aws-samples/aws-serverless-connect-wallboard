@@ -54,11 +54,12 @@ Rows:
       BackgroundColor: <HTML background color for this cell>
       TextSize: <font size for this cell>
       Reference: <name of data source or calculation result to put in this cell>
+      Format: Time
       ThresholdReference: <name of threshold to apply to this cell>
       Rows: <number of rows to span this cell across - default=1>
       Cells: <number of columns to span this cell across - default=1>
 ```
-
+The `Format` parameter is used for converting a numeric data point (which should contain an integer specifying seconds) into a HH:MM:SS string. The only format supported currently is `Time`. Any other format type will be ignored. If this paramter is used on string data it will be ignored.
 ### References
 When specifying references to data in Amazon Connect the format for each is as follows:
 ```yaml
