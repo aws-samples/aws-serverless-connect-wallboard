@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Wallboard Designer</title>
+
+    <meta http-equiv="Description" name="Description" content="Wallboard Designer">
+    <meta http-equiv="Content-Type" content="text/html charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js" type="text/javascript"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js" type="text/javascript"></script>
+
+    <style>
+      body { font-family: Helvetica, Arial, sans-serif; line-height: 1.5; }
+      .config, .editing, .layout-container { border: 1px grey solid; margin: 5px; padding: 5px; }
+      .config, .editing { float: left; }
+      .config a, .layout-table td a { text-decoration: none;}
+      .config a:hover, .layout-table td a:hover { background-color: lightgray;}
+      .top-container, .layout-table table { margin-left: auto; margin-right: auto; }
+      .layout-container { clear: both; position: relative; overflow: scroll; }
+      .layout-title { z-index: 20; position: absolute; top: 10px; left: 10px ;}
+      .layout-table td { padding: 5px; text-align: center; vertical-align: middle; }
+      .layout-table td.cell-used { background-color: lightgreen; }
+      .threshold-output td, .threshold-output th { padding-left: 3px; padding-right: 3px; text-align: center;}
+      .editing div { margin: 4px; }
+      .config-heading, .input-heading, .layout-heading { font-weight: bold;}
+      .border { border: 1px black solid; }
+      .hidden { display: none; }
+      .warnings { color: orange; }
+      .outputtext { position: relative; }
+      .copybutton { z-index: 20; position: absolute; top: 10px; right: 50px; }
+      pre { margin-left: 40px; margin-right: 40px; background-color: lightgrey; padding: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="top-container">
+      <div class="config">
+        <div class="config-heading">All Settings</div>
+        <div class="general"><a href="#" onclick="showSettings('general')">General settings</a></div>
+        <div class="textdefaults"><a href="#" onclick="showSettings('text')">Default text settings</a></div>
+        <div class="datasources"><a href="#" onclick="showSettings('sources')">Data sources</a></div>
+        <div class="calculations hidden"><a href="#" onclick="showSettings('calculations')">Calculations</a></div>
+        <div class="thresholds hidden"><a href="#" onclick="showSettings('thresholds')">Thresholds</a></div>
+        <div class="agentstates"><a href="#" onclick="showSettings('agentstates')">Agent states</a></div>
+      </div>
+      <div class="editing hidden">
+        <div id="general-edit" class="hidden">
+          <div class="input-heading">General Settings</div>
+          <div class="input"><input placeholder="Wallboard name" type="text" name="wallboardname" id="wallboardname" onchange="changeGlobal()"></div>
+          <div class="input"><input placeholder="Description" type="text" name="wallboarddescription" id="wallboarddescription" onchange="changeGlobal()"></div>
+          <div class="input">Rows: <input type="number" name="rows" id="rows" size="3" min="1" onchange="changeGrid()"></div>
+          <div class="input">Columns: <input type="number" name="cols" id="cols" size="3" min="1" onchange="changeGrid()"></div>
+        </div>
+        <div id="text-edit" class="hidden">
+          <div class="input-heading">Text Defaults</div>
+          <div class="input"><input placeholder="Text color" type="text" name="defaultcolor" id="defaultcolor" onchange="changeText()"></div>
+          <div class="input"><input placeholder="Background color" type="text" name="defaultbackground" id="defaultbackground" onchange="changeText()"></div>
+          <div class="input"><input placeholder="Warning color" type="text" name="warningbackground" id="warningbackground" onchange="changeText()"></div>
+          <div class="input"><input placeholder="Alert color" type="text" name="alertbackground" id="alertbackground" onchange="changeText()"></div>
+          <div class="input"><input placeholder="Font" type="text" name="fontname" id="fontname" onchange="changeText()"></div>
+          <div class="input"><input placeholder="Size" type="text" name="defaultsize" id="defaultsize" size="4" onchange="changeText()"></div>
+        </div>
+        <div id="sources-edit" class="hidden">
+          <div class="input-heading">Data Sources</div>
+          <div class="input"><input placeholder="Source name" type="text" name="sourcename" id="sourcename"></div>
+          <div class="input"><input placeholder="Description" type="text" name="sourcedescription" id="sourcedescription"></div>
+          <div class="input"><input placeholder="Connect instance id" type="text" name="sourceconnectid" id="sourceconnectid"></div>
+          <div class="input"><input placeholder="Connect queue id" type="text" name="sourcequeueid" id="sourcequeueid"></div>
+          <div class="input">
+            <select name="sourcemetric" id="sourcemetric">
+              <option value="">Connect metric</option>
+              <option value="CONTACTS_QUEUED">Contacts queued</option>
+              <option value="CONTACTS_HANDLED">Contacts handled</option>
+              <option value="CONTACTS_ABANDONED">Contacts abandoned</option>
+              <option value="CONTACTS_CONSULTED">Contacts consulted</option>
+              <option value="CONTACTS_AGENT_HUNG_UP_FIRST">Contacts agent hung up first</option>
+              <option value="CONTACTS_HANDLED_INCOMING">Contacts handled incoming</option>
+              <option value="CONTACTS_HANDLED_OUTBOUND">Contacts handled outbound</option>
+              <option value="CONTACTS_HOLD_ABANDONS">Contacts hold abandons</option>
+              <option value="CONTACTS_TRANSFERRED_IN">Contacts transferred in</option>
+              <option value="CONTACTS_TRANSFERRED_OUT">Contacts transferred out</option>
+              <option value="CONTACTS_TRANSFERRED_IN_FROM_QUEUE">Contacts transferred in from queue</option>
+              <option value="CONTACTS_TRANSFERRED_OUT_FROM_QUEUE">Contacts transferred out from queue</option>
+              <option value="CALLBACK_CONTACTS_HANDLED">Callback contacts handled</option>
+              <option value="API_CONTACTS_HANDLED">API contacts handled</option>
+              <option value="CONTACTS_MISSED">Contacts missed</option>
+              <option value="OCCUPANCY">Occupancy</option>
+              <option value="HANDLE_TIME">Handle time</option>
+              <option value="AFTER_CONTACT_WORK_TIME">After contact work time</option>
+              <option value="QUEUED_TIME">Queued time</option>
+              <option value="ABANDON_TIME">Abandon time</option>
+              <option value="QUEUE_ANSWER_TIME">Queue answer time</option>
+              <option value="HOLD_TIME">Hold time</option>
+              <option value="INTERACTION_TIME">Interaction time</option>
+              <option value="INTERACTION_AND_HOLD_TIME">Interaction and hold time</option>
+              <option value="SERVICE_LEVEL">Service level</option>
+              <option value="AGENTS_AVAILABLE">Agents available</option>
+              <option value="AGENTS_ONLINE">Agents online</option>
+              <option value="AGENTS_ON_CALL">Agents on call</option>
+              <option value="AGENTS_STAFFED">Agents staffed</option>
+              <option value="AGENTS_AFTER_CONTACT_WORK">Agents after contact work</option>
+              <option value="AGENTS_NON_PRODUCTIVE">Agents non-productive</option>
+              <option value="AGENTS_ERROR">Agents error</option>
+              <option value="CONTACTS_IN_QUEUE">Contacts in queue</option>
+              <option value="OLDEST_CONTACT_AGE">Oldest contact age</option>
+              <option value="CONTACTS_SCHEDULED">Contacts scheduled</option>
+            </select>
+          </div>
+          <div class="input"><button title="Add source" onclick="addSource()">Add</button></div>
+          <div class="sourcelist"></div>
+        </div>
+        <div id="calculations-edit" class="hidden">
+          <div class="input-heading">Calculations</div>
+          <div class="input"><input placeholder="Name" type="text" name="calculationname" id="calculationname"></div>
+          <div class="input"><input placeholder="Formula" type="text" name="calculationformula" id="calculationformula"></div>
+          <div class="input"><button title="Add calculation" onclick="addCalculation()">Add</button></div>
+          <div class="calculationlist"></div>
+        </div>
+        <div id="thresholds-edit" class="hidden">
+          <div class="input-heading">Thresholds</div>
+          <div class="input"><input placeholder="Name" type="text" name="thresholdname" id="thresholdname"></div>
+          <div class="input">Reference: <select id="thresholdreference"></select></div>
+          <div class="input">Warn below: <input type="number" name="warnbelow" size="3" id="warnbelow"></div>
+          <div class="input">Alert below: <input type="number" name="alertbelow" size="3" id="alertbelow"></div>
+          <div class="input">Warn above: <input type="number" name="warnabove" size="3" id="warnabove"></div>
+          <div class="input">Alert above: <input type="number" name="alertabove" size="3" id="alertabove"></div>
+          <div class="input"><button title="Add threshold" onclick="addThreshold()">Add</button></div>
+          <div class="thresholdlist"></div>
+        </div>
+        <div id="agentstates-edit" class="hidden">
+          <div class="input-heading">Agent States</div>
+          <div class="input"><input placeholder="Name" type="text" name="agentstatename" id="agentstatename"></div>
+          <div class="input"><input placeholder="Color" type="text" name="agentstatecolor" id="agentstatecolor"></div>
+          <div class="input"><button title="Add agent state" onclick="addAgentState()">Add</button></div>
+          <div class="agentstatelist"></div>
+        </div>
+        <div id="cell-edit" class="hidden">
+          <div class="input-heading">Editing cell <span id="cell-edit-id"></span></div>
+          <div class="input"><input placeholder="Static text" type="text" id="celltext" onchange="updateCell()"></div>
+          <div class="input"><input placeholder="Text color" type="text" id="textcolor" onchange="updateCell()"></div>
+          <div class="input"><input placeholder="Background color" type="text" id="backgroundcolor" onchange="updateCell()"></div>
+          <div class="input"><input placeholder="Font size" type="text" id="textsize" onchange="updateCell()"></div>
+          <div class="input"><input placeholder="Agent details" type="text" id="agentname" onchange="updateCell()"></select></div>
+          <div id="cell-datasource" class="input hidden">Data source: <select id="datasource-select" onchange="updateCell()"></select></div>
+          <div id="cell-threshold" class="input hidden">Threshold: <select id="threshold-select" onchange="updateCell()"></select></div>
+
+          <div id="cell-format" class="input hidden">Cell format: 
+            <select id="format-select" onchange="updateCell()">
+              <option value=""></option>
+              <option value="Time">Time</option>
+            </select>
+          </div>
+
+          <div class="input">Columns wide: <input type="number" id="columnswide" size="1" min="1" onchange="updateCell()"></div>
+          <div class="input">Rows high: <input type="number" id="rowshigh" size="1" min="1" onchange="updateCell()"></div>
+        </div>
+        <div id="warnings-output" class="warnings"></div>
+      </div>
+    </div>
+    <div class="layout-container">
+      <div class="layout-heading">Wallboard Cells</div>
+      <div class="layout-table"></div>
+    </div>
+    <div class="output"></div>
+      <div class="outputtext">
+        <div class="copybutton"><button title="Copy to clipboard" onclick="copyToClipboard('rawoutput')">Copy</button></div>
+        <pre class="rawoutput"></pre>
+      </div>
+    </div>
+
+    <script>
+      let globalSettings = {}, textSettings = {}, sources = {}, calculations = {}, thresholds = {}, agentStates = {}, cells = {};
+      let init = true;
+      let sourceCell, currentCell;
+      
+      changeGlobal();
+      changeText();
+      changeGrid();
+      (globalSettings['wallboardName']) && produceOutput();
+      init = false;
+
+      function showSettings(sectionName) {
+        $('.editing').show();
+        $('.editing div').each(function() {
+          if (this.id.endsWith('-edit')) {
+            if (this.id == sectionName+'-edit') {
+              $($('#'+this.id)).show();
+            } else {
+              $($('#'+this.id)).hide();
+            }
+          }
+        });
+
+        if (currentCell) {
+          $('#'+currentCell).removeClass('border');
+          currentCell = '';
+        }
+      }
+
+      function changeGlobal() {
+        const wallboardName = $('#wallboardname').val().trim().replace(/\s/g, '');
+        const description = $('#wallboarddescription').val().trim();
+
+        globalSettings['wallboardName'] = wallboardName;
+        $('#wallboardname').val(wallboardName);
+        description && (globalSettings['description'] = description) || delete globalSettings['description'];
+
+        init || produceOutput();
+      }
+
+      function changeText() {
+        const defaultColor = $('#defaultcolor').val().trim();
+        const defaultBackground = $('#defaultbackground').val().trim();
+        const warningBackground = $('#warningbackground').val().trim();
+        const alertBackground = $('#alertbackground').val().trim();
+        const defaultSize = $('#defaultsize').val().trim();
+        const fontName = $('#fontname').val().trim();
+      
+        defaultColor && (textSettings['defaultColor'] = defaultColor) || delete textSettings['defaultColor'];
+        defaultBackground && (textSettings['defaultBackground'] = defaultBackground) || delete textSettings['defaultBackground'];
+        warningBackground && (textSettings['warningBackground'] = warningBackground) || delete textSettings['warningBackground'];
+        alertBackground && (textSettings['alertBackground'] = alertBackground) || delete textSettings['alertBackground'];
+        defaultSize && (textSettings['defaultSize'] = defaultSize) || delete textSettings['defaultSize'];
+        fontName && (textSettings['fontName'] = fontName) || delete textSettings['fontName'];
+      
+        init || produceOutput();
+      }
+
+      function addSource() {
+        const sourceName = $('#sourcename').val().trim().replace(/\s/g, '');
+        const sourceDescription = $('#sourcedescription').val().trim();
+        const sourceConnectId = $('#sourceconnectid').val().trim();
+        const sourceQueueId = $('#sourcequeueid').val().trim();
+        const sourceMetric = $('#sourcemetric').val();
+
+        $('#warnings-output').empty();
+        (sourceName) || $('#warnings-output').append('<div>Specify a source name.</div>');
+        (sourceDescription) || $('#warnings-output').append('<div>Specify a source description.</div>');
+        (sourceConnectId) || $('#warnings-output').append('<div>Specify a source Connect instance id.</div>');
+        (sourceQueueId) || $('#warnings-output').append('<div>Specify a source Connect queue id.</div>');
+        (sourceMetric) || $('#warnings-output').append('<div>Specify a source metric.</div>');
+
+        (sources[sourceName]) && $('#warnings-output').append('<div>A source with that name already exists.</div>');
+        (calculations[sourceName]) && $('#warnings-output').append('<div>A calculation with that name already exists.</div>');
+
+        if ($('#warnings-output').html().length) { return; }
+
+        sources[sourceName] = {'description':sourceDescription, 'reference':sourceConnectId+':'+sourceQueueId+':'+sourceMetric};
+
+        $('#sourcename').val('');
+        $('#sourcedescription').val('');
+        $('#sourceconnectid').val('');
+        $('#sourcequeueid').val('');
+        $('#sourcemetric').val('');
+
+        inputVisibility();
+        updateSourceDialog();
+        changeGrid();
+        produceOutput();
+      }
+      
+      function inputVisibility() {
+        if (Object.keys(sources).length) {
+          $('.calculations').show();
+          $('.thresholds').show();
+          $('#cell-datasource').show();
+          $('#cell-format').show();
+        } else {
+          $('.calculations').hide();
+          $('.thresholds').hide();
+          $('#cell-datasource').hide();
+          $('#cell-format').hide();
+        }
+
+        Object.keys(thresholds).length ? $('#cell-threshold').show() : $('#cell-threshold').hide();
+
+        let sourceHtml = '';
+
+        sourceHtml += '<option value=""></option>';
+        for (const source in sources) {
+          sourceHtml += '<option value="'+source+'">'+source+'</option>';
+        }
+        for (const calc in calculations) {
+          sourceHtml += '<option value="'+calc+'">'+calc+'</option>';
+        }
+        $('#thresholdreference').html(sourceHtml);
+        $('#datasource-select').html(sourceHtml);
+
+        let thresholdHtml = '';
+
+        thresholdHtml += '<option value=""></option>';
+        for (const threshold in thresholds) {
+          thresholdHtml += '<option value="'+threshold+'">'+threshold+'</option>';
+        }
+        $('#threshold-select').html(thresholdHtml);
+      }
+
+      function checkId(idString) {
+        const idSplit = idString.split('-');
+
+        return (idSplit.length == 4);
+      }
+
+      function updateSourceDialog() {
+        let sourceHtml = '';
+        
+        if (Object.keys(sources).length ) {
+          sourceHtml += '<table><tr><th>Name</th><th>Connect Reference</th></tr>';
+          for (const source in sources) {
+            sourceHtml += '<tr><td>'+source+'</td><td>'+sources[source]['reference']+'</td>';
+
+            //
+            // Only allow deletion if this source is not referenced anywhere.
+            //
+            let foundReference = false;
+            for (const calc in calculations) {
+              if (calculations[calc]['formula'].includes(source)) {
+                foundReference = true;
+                break;
+              }
+            }
+            if (! foundReference) {
+              for (const threshold in thresholds) {
+                if (thresholds[threshold]['reference'] == source) {
+                  foundReference = true;
+                  break;
+                }
+              }
+            }
+            if (! foundReference) {
+              const rows = $('#rows').val();
+              const cols = $('#cols').val();
+              for (let row = 1; row <= rows; row++) {
+                for (let col = 1; col <= cols; col++) {
+                  const cellId = 'R'+row+'C'+col;
+                  if (! (cellId in cells)) { continue; }
+
+                  if (cells[cellId]['reference'] == source) {
+                    foundReference = true;
+                    break;
+                  }
+                }
+              }
+            }
+            
+            sourceHtml += '<td>';
+            if (! foundReference) {
+              sourceHtml += '<button title="Delete source" onclick="deleteSource(\''+source+'\')">Delete</button>';
+            }
+            sourceHtml += '</td>';
+            
+            let warning = '';
+            const sourceList = sources[source]['reference'].split(':');
+            if (! checkId(sourceList[0])) { warning += '<div>&quot;'+sourceList[0]+'&quot; does not appear to be a valid Connect instance id.</div>'; }
+            if (! checkId(sourceList[1])) { warning += '<div>&quot;'+sourceList[1]+'&quot; does not appear to be a valid Connect queue id.</div>'; }
+            if (warning) { sourceHtml += '<td class="warnings">'+warning+'</td>'; }
+
+            sourceHtml += '</tr>';
+          }
+          sourceHtml += '</table>';
+        }
+
+        $('.sourcelist').html(sourceHtml);
+      }
+
+      function deleteSource(sourceName) {
+        delete sources[sourceName];
+
+        inputVisibility();
+        updateSourceDialog();
+        changeGrid();
+        produceOutput();
+      }
+
+      function addCalculation() {
+        const calculationName = $('#calculationname').val().trim().replace(/\s/g, '');
+        const calculationFormula = $('#calculationformula').val().trim();
+
+        $('#warnings-output').empty();
+        (calculationName) || $('#warnings-output').append('<div>Specify a calculation name.</div>');
+        (calculationFormula) || $('#warnings-output').append('<div>Specify a formula.</div>');
+
+        (sources[calculationName]) && $('#warnings-output').append('<div>A source with that name already exists.</div>');
+        (calculations[calculationName]) && $('#warnings-output').append('<div>A calculation with that name already exists.</div>');
+
+        if ($('#warnings-output').html().length) { return; }
+
+        calculations[calculationName] = {'formula':calculationFormula};
+
+        $('#calculationname').val('');
+        $('#calculationformula').val('');
+
+        inputVisibility();
+        updateCalculationDialog();
+        updateSourceDialog();
+        changeGrid();
+        produceOutput();
+      }
+
+      function updateCalculationDialog() {
+        let calculationHtml = '';
+
+        if (Object.keys(calculations).length ) {
+          calculationHtml += '<table><tr><th>Name</th><th>Formula</th></tr>';
+          for (const calc in calculations) {
+            calculationHtml += '<tr><td>'+calc+'</td><td>'+calculations[calc]['formula']+'</td>';
+
+            //
+            // Only allow deletion if this calculation is not referenced anywhere.
+            //
+            let foundReference = false;
+            const rows = $('#rows').val();
+            const cols = $('#cols').val();
+            for (let row = 1; row <= rows; row++) {
+              for (let col = 1; col <= cols; col++) {
+                const cellId = 'R'+row+'C'+col;
+                if (! (cellId in cells)) { continue; }
+
+                if (cells[cellId]['reference'] == calc) {
+                  foundReference = true;
+                  break;
+                }
+              }
+            }
+            if (! foundReference) {
+              for (const threshold in thresholds) {
+                if (thresholds[threshold]['reference'] == calc) {
+                  foundReference = true;
+                  break;
+                }
+              }
+            }
+            
+            calculationHtml += '<td>';
+            if (! foundReference) {
+              calculationHtml += '<button title="Delete calculation" onclick="deleteCalculation(\''+calc+'\')">Delete</button>';
+            }
+            calculationHtml += '</td>';
+
+            const tokens = calculations[calc]['formula'].split(/\W+/);
+            let warning = '';
+            for (const element of tokens) {
+              if (! element.length) { continue; }
+              if (! isNaN(element)) { continue; }
+              if (! (element in sources)) {
+                warning += '<div>&quot;'+element+'&quot; does not appear to be a valid source name.</div>';
+              }
+            }
+            if (warning) { calculationHtml += '<td class="warnings">'+warning+'</td>' }
+
+            calculationHtml += '</tr>';
+          }
+          calculationHtml += '</table>';
+        }
+
+        $('.calculationlist').html(calculationHtml);
+      }
+
+      function deleteCalculation(calculationName) {
+        delete calculations[calculationName];
+
+        inputVisibility();
+        updateCalculationDialog();
+        updateSourceDialog();
+        changeGrid();
+        produceOutput();
+      }
+
+      function addThreshold() {
+        const thresholdName = $('#thresholdname').val().trim().replace(/\s/g, '');
+        const thresholdReference = $('#thresholdreference').val();
+        const warnBelow = $('#warnbelow').val();
+        const alertBelow = $('#alertbelow').val();
+        const warnAbove = $('#warnabove').val();
+        const alertAbove = $('#alertabove').val();
+
+        $('#warnings-output').empty();
+        (thresholdName) || $('#warnings-output').append('<div>Specify a threshold name.</div>');
+        (thresholdReference) || $('#warnings-output').append('<div>Select a reference metric or calculation.</div>');
+
+        (thresholds[thresholdName]) && $('#warnings-output').append('<div>A threshold with that name already exists.</div>');
+
+        if ($('#warnings-output').html().length) { return; }
+
+        thresholds[thresholdName] = {'reference':thresholdReference};
+        if (warnBelow.length) { thresholds[thresholdName]['warnBelow'] = warnBelow; }
+        if (alertBelow.length) { thresholds[thresholdName]['alertBelow'] = alertBelow; }
+        if (warnAbove.length) { thresholds[thresholdName]['warnAbove'] = warnAbove; }
+        if (alertAbove.length) { thresholds[thresholdName]['alertAbove'] = alertAbove; }
+
+        $('#thresholdname').val('');
+        $('#thresholdreference').val('');
+        $('#warnbelow').val('');
+        $('#alertbelow').val('');
+        $('#warnabove').val('');
+        $('#alertabove').val('');
+      
+        inputVisibility();
+        updateThresholdDialog();
+        updateSourceDialog();
+        updateCalculationDialog();
+        changeGrid();
+        produceOutput();
+      }
+
+      function updateThresholdDialog() {
+        let thresholdHtml = '';
+
+        if (Object.keys(thresholds).length ) {
+          thresholdHtml += '<table class="threshold-output"><tr><th>Name</th><th>Reference</th><th>Warn Below</th><th>Alert Below</th><th>Warn Above</th><th>Alert Above</th></tr>';
+          for (const threshold in thresholds) {
+            thresholdHtml += '<tr><td>'+threshold+'</td><td>'+thresholds[threshold]['reference']+'</td>';
+            thresholdHtml += '<td class="text-center">'+(('warnBelow' in thresholds[threshold]) ? thresholds[threshold]['warnBelow'] : 'None')+'</td>';
+            thresholdHtml += '<td class="text-center">'+(('alertBelow' in thresholds[threshold]) ? thresholds[threshold]['alertBelow'] : 'None')+'</td>';
+            thresholdHtml += '<td class="text-center">'+(('warnAbove' in thresholds[threshold]) ? thresholds[threshold]['warnAbove'] : 'None')+'</td>';
+            thresholdHtml += '<td class="text-center">'+(('alertAbove' in thresholds[threshold]) ? thresholds[threshold]['alertAbove'] : 'None')+'</td>';
+
+            //
+            // Only allow deletion if this threshold is not referenced anywhere.
+            //
+            let foundReference = false;
+            const rows = $('#rows').val();
+            const cols = $('#cols').val();
+            for (let row = 1; row <= rows; row++) {
+              for (let col = 1; col <= cols; col++) {
+                const cellId = 'R'+row+'C'+col;
+                if (! (cellId in cells)) { continue; }
+
+                if (cells[cellId]['threshold'] == threshold) {
+                  foundReference = true;
+                  break;
+                }
+              }
+            }
+            
+            thresholdHtml += '<td>';
+            if (! foundReference) {
+              thresholdHtml += '<button title="Delete threshold" onclick="deleteThreshold(\''+threshold+'\')">Delete</button>';
+            }
+            thresholdHtml += '</td>';
+            thresholdHtml += '</tr>';
+          }
+          thresholdHtml += '</table>';
+        }
+
+        $('.thresholdlist').html(thresholdHtml);
+      }
+      
+      function deleteThreshold(thresholdName) {
+        delete thresholds[thresholdName];
+
+        inputVisibility();
+        updateThresholdDialog();
+        updateSourceDialog();
+        updateCalculationDialog();
+        changeGrid();
+        produceOutput();
+      }
+
+      function addAgentState() {
+        const stateName = $('#agentstatename').val().trim().replace(/\s/g, '');
+        const stateColor = $('#agentstatecolor').val().trim();
+
+        $('#warnings-output').empty();
+        (stateName) || $('#warnings-output').append('<div>Specify a state name.</div>');
+        (stateColor) || $('#warnings-output').append('<div>Specify a color.</div>');
+
+        (agentStates[stateName]) && $('#warnings-output').append('<div>An agent state with that name already exists.</div>');
+
+        agentStates[stateName] = {'color':stateColor};
+
+        $('#agentstatename').val('');
+        $('#agentstatecolor').val('');
+
+        updateAgentStateDialog();
+        produceOutput();
+      }
+
+      function updateAgentStateDialog() {
+        let agentHtml = '';
+
+        if (Object.keys(agentStates).length ) {
+          agentHtml = '<table><tr><th>Name</th><th>Color</th></tr>';
+          for (const state in agentStates) {
+            agentHtml += '<tr><td>'+state+'</td><td>'+agentStates[state]['color']+'</td>';
+            agentHtml += '<td><button title="Delete agent state" onclick="deleteAgentState(\''+state+'\')">Delete</button></td></tr>';
+          }
+          agentHtml += '</table>';
+        }
+
+        $('.agentstatelist').html(agentHtml);
+      }
+
+      function deleteAgentState(stateName) {
+        delete agentStates[stateName];
+
+        updateAgentStateDialog();
+        produceOutput();
+      }
+
+      function editCell(cellId) {
+        $('#cell-edit-id').html(cellId);
+
+        if (cells[cellId]) {
+          $('#celltext').val(cells[cellId]['text']);
+          $('#textcolor').val(cells[cellId]['textcolor']);
+          $('#backgroundcolor').val(cells[cellId]['backgroundcolor']);
+          $('#textsize').val(cells[cellId]['textsize']);
+          $('#datasource-select').val(cells[cellId]['reference']);
+          $('#threshold-select').val(cells[cellId]['threshold']);
+          $('#format-select').val(cells[cellId]['format']);
+          $('#agentname').val(cells[cellId]['agentname']);
+          $('#columnswide').val(cells[cellId]['columns']);
+          $('#rowshigh').val(cells[cellId]['rows']);
+        } else {
+          $('#celltext').val('');
+          $('#textcolor').val('');
+          $('#backgroundcolor').val('');
+          $('#textsize').val('');
+          $('#datasource-select').val('');
+          $('#threshold-select').val('');
+          $('#format-select').val('');
+          $('#agentname').val('');
+          $('#columnswide').val(1);
+          $('#rowshigh').val(1);
+        }
+
+        showSettings('cell');
+
+        (currentCell) && $('#'+currentCell).removeClass('border');
+        $('#'+cellId).addClass('border');
+        currentCell = cellId;
+      }
+
+      function updateCell() {
+        const cellId = $('#cell-edit-id').html();
+
+        let existingRows = 0, existingColumns = 0;
+        if (cells[cellId]) {
+          existingRows = cells[cellId]['rows'] ? parseInt(cells[cellId]['rows']) : 0;
+          existingColumns = cells[cellId]['columns'] ? parseInt(cells[cellId]['columns']) : 0;
+        }
+
+        cells[cellId] = {};
+        const cellText = $('#celltext').val().trim();
+        const reference = $('#datasource-select').val();
+        const format = $('#format-select').val();
+        const threshold = $('#threshold-select').val();
+        const textColor = $('#textcolor').val().trim();
+        const backgroundColor = $('#backgroundcolor').val().trim();
+        const agentName = $('#agentname').val().trim();
+        const textSize = $('#textsize').val() ? parseInt($('#textsize').val()) : 0;
+        const rowsHigh = $('#rowshigh').val() ? parseInt($('#rowshigh').val()) : 0;
+        const columnsWide = $('#columnswide').val() ? parseInt($('#columnswide').val()) : 0;
+
+        if (cellText) { cells[cellId]['text'] = cellText; }
+        if (reference) { cells[cellId]['reference'] = reference; }
+        if (format) { cells[cellId]['format'] = format; }
+        if (threshold) { cells[cellId]['threshold'] = threshold; }
+        if (textColor) { cells[cellId]['textcolor'] = textColor; }
+        if (backgroundColor) { cells[cellId]['backgroundcolor'] = backgroundColor; }
+        if (agentName) { cells[cellId]['agentname'] = agentName; }
+        if (textSize) { cells[cellId]['textsize'] = textSize; }
+        if (rowsHigh) { cells[cellId]['rows'] = rowsHigh; }
+        if (columnsWide) { cells[cellId]['columns'] = columnsWide; }
+      
+        updateSourceDialog();
+        updateCalculationDialog();
+        updateThresholdDialog();
+        produceOutput();
+        
+        ((rowsHigh != existingRows) || (columnsWide != existingColumns)) && changeGrid();
+      }
+
+      function changeGrid() {
+        let rows = $('#rows').val();
+        let cols = $('#cols').val();
+
+        let tableHtml = '<table id="grid">';
+        let skipRows = {};
+        let cellList = [];
+        for (let row = 1; row <= rows; row++) {
+          tableHtml += '<tr>';
+          for (let col = 1; col <= cols; col++) {
+            if (skipRows[col] && skipRows[col][0]) {
+              skipRows[col][0]--;
+              (skipRows[col][1]) && (col += skipRows[col][1]);
+              continue;
+            }
+
+            const cellId = 'R'+row+'C'+col;
+            cellList.push(cellId);
+
+            tableHtml += '<td id="'+cellId+'" class="'+(cells[cellId] ? 'cell-used' : 'cell-unused')+ ((cellId == currentCell) ? ' border' : '')+'"';
+            if (cells[cellId]) {
+              const rowSpan = parseInt(cells[cellId]['rows']);
+              const colSpan = parseInt(cells[cellId]['columns']);
+              if (rowSpan > 1) {
+                tableHtml += ' rowspan="'+rowSpan+'"';
+                skipRows[col] = [rowSpan-1, colSpan-1];
+              }
+              if (colSpan > 1) {
+                tableHtml += ' colspan="'+colSpan+'"';
+                col += colSpan-1; // Don't use this variable for the rest of the loop
+              }
+            }
+            tableHtml += '>';
+
+            tableHtml += '<a id="'+cellId+'-link" href="#" onclick="editCell(\''+cellId+'\')">'+cellId+'</a>';
+            tableHtml += '</td>';
+          }
+          tableHtml += '</tr>';
+        }
+        tableHtml += '</table>';
+
+        $('.layout-table').html(tableHtml);
+      
+        if ( ! init ) {
+          produceOutput();
+          for (const cell of cellList) {
+            $('#'+cell).draggable({containment: '#grid', start: moveStart, stop:moveEnd});
+            $('#'+cell).droppable({drop: moveEnd});
+          }
+        }
+      }
+    
+      function moveStart(event, ui) {
+        sourceCell = event['target']['id'];
+      }
+
+      function moveEnd(event, ui) {
+        const destCell = event['target']['id'];
+
+        if (destCell != sourceCell) {
+          if (sourceCell in cells) { const tempDetails = cells[sourceCell]; }
+          if (destCell in cells) { cells[sourceCell] = cells[destCell]; }
+          if (sourceCell in cells) { cells[destCell] = tempDetails; }
+        }
+      
+        changeGrid();
+      }
+
+      function produceOutput() {
+        $('#warnings-output').empty();
+
+        (globalSettings['wallboardName']) || $('#warnings-output').append('<div>You must specify a wallboard name.</div>');
+
+        const rows = $('#rows').val();
+        const cols = $('#cols').val();
+        (rows && cols) || $('#warnings-output').append('<div>Specify rows and columns.</div>');
+
+        $('.rawoutput').empty();
+        $('.rawoutput').append('WallboardTemplateFormatVersion: 1\n');
+        $('.rawoutput').append('Identifier: '+globalSettings['wallboardName']+'\n');
+        (globalSettings['description']) && $('.rawoutput').append('Description: '+globalSettings['description']+'\n');
+      
+        if (Object.keys(textSettings).length) {
+          $('.rawoutput').append('\nDefaults:\n');
+          (textSettings['defaultColor']) && $('.rawoutput').append('  TextColor: '+textSettings['defaultColor']+'\n');
+          (textSettings['defaultBackground']) && $('.rawoutput').append('  BackgroundColor: '+textSettings['defaultBackground']+'\n');
+          (textSettings['warningBackground']) && $('.rawoutput').append('  WarningBackgroundColor: '+textSettings['warningBackground']+'\n');
+          (textSettings['alertBackground']) && $('.rawoutput').append('  AlertBackgroundColor: '+textSettings['defaultColor']+'\n');
+          (textSettings['defaultSize']) && $('.rawoutput').append('  TextSize: '+textSettings['defaultSize']+'\n');
+          (textSettings['fontName']) && $('.rawoutput').append('  Font: '+textSettings['fontName']+'\n');
+        }
+      
+        if (Object.keys(sources).length) {
+          $('.rawoutput').append('\nSources:\n');
+          for (const sourceName in sources) {
+            $('.rawoutput').append('  - Source: '+sourceName+'\n');
+            $('.rawoutput').append('    Description: '+sources[sourceName]['description']+'\n');
+            $('.rawoutput').append('    Reference: '+sources[sourceName]['reference']+'\n');
+          }
+        }
+
+        if (Object.keys(calculations).length) {
+          $('.rawoutput').append('\nCalculations:\n');
+          for (const calcName in calculations) {
+            $('.rawoutput').append('  - Calculation: '+calcName+'\n');
+            $('.rawoutput').append('    Formula: '+calculations[calcName]['formula']+'\n');
+          }
+        }
+
+        if (Object.keys(thresholds).length) {
+          $('.rawoutput').append('\nThresholds:\n');
+          for (const thresholdName in thresholds) {
+            $('.rawoutput').append('  - Threshold: '+thresholdName+'\n');
+            $('.rawoutput').append('    Reference: '+thresholds[thresholdName]['reference']+'\n');
+            if ('warnBelow' in thresholds[thresholdName]) { $('.rawoutput').append('    WarnBelow: '+thresholds[thresholdName]['warnBelow']+'\n'); }
+            if ('alertBelow' in thresholds[thresholdName]) { $('.rawoutput').append('    AlertBelow: '+thresholds[thresholdName]['alertBelow']+'\n'); }
+            if ('warnAbove' in thresholds[thresholdName]) { $('.rawoutput').append('    WarnAbove: '+thresholds[thresholdName]['warnAbove']+'\n'); }
+            if ('alertAbove' in thresholds[thresholdName]) { $('.rawoutput').append('    AlertAbove: '+thresholds[thresholdName]['alertAbove']+'\n'); }
+          }
+        }
+
+        if (Object.keys(agentStates).length) {
+          $('.rawoutput').append('\nAgentStates:\n');
+          for (const stateName in agentStates) {
+            $('.rawoutput').append('  - State: '+stateName+'\n');
+            $('.rawoutput').append('    Color: '+agentStates[stateName]['color']+'\n');
+          }
+        }
+
+        if (Object.keys(cells).length) {
+          let allRowContent = '';
+          let skipRows = {};
+          for (let row = 1; row <= rows; row++) {
+            let rowContent = ''
+            for (let col = 1; col <= cols; col++) {
+              if( skipRows[col] ) {
+                skipRows[col]--;
+                continue;
+              }
+
+              const cellId = 'R'+row+'C'+col;
+              if (! cells[cellId]) { continue; }
+
+              const cellSection = '    - Cell: '+col+'\n';
+              let cellContent = '';
+              if (cells[cellId]['text']) { cellContent += '      Text: '+cells[cellId]['text']+'\n'; }
+              if (cells[cellId]['textcolor']) { cellContent += '      TextColor: '+cells[cellId]['textcolor']+'\n'; }
+              if (cells[cellId]['backgroundcolor']) { cellContent += '      BackgroundColor: '+cells[cellId]['backgroundcolor']+'\n'; }
+              if (cells[cellId]['textsize']) { cellContent += '      TextSize: '+cells[cellId]['textsize']+'\n'; }
+              if (cells[cellId]['reference']) { cellContent += '      Reference: '+cells[cellId]['reference']+'\n'; }
+              if (cells[cellId]['agentname']) { cellContent += '      Reference: '+cells[cellId]['agentname']+'\n'; }
+              if (cells[cellId]['format']) { cellContent += '      Format: '+cells[cellId]['format']+'\n'; }
+              if (cells[cellId]['threshold']) { cellContent += '      ThresholdReference: '+cells[cellId]['threshold']+'\n'; }
+
+              if (cells[cellId]['columns'] > 1) {
+                cellContent += '      Cells: '+cells[cellId]['columns']+'\n';
+                col += parseInt(cells[cellId]['columns'])-1;
+              }
+              if (cells[cellId]['rows'] > 1) {
+                cellContent += '      Rows: '+cells[cellId]['rows']+'\n';
+                skipRows[col] = parseInt(cells[cellId]['rows'])-1; // Don't use this variable for the rest of the loop
+              }
+
+              if (cellContent.length) {
+                rowContent += cellSection;
+                rowContent += cellContent;
+              }
+            }
+            
+            if (rowContent.length) {
+              allRowContent += '  - Row: '+row+'\n';
+              allRowContent += '    Cells:\n';
+              allRowContent += rowContent;
+            }
+          }
+        
+          if (allRowContent.length) {
+            $('.rawoutput').append('\nRows:\n');
+            $('.rawoutput').append(allRowContent);
+          }
+        }
+
+        $('.output').show();
+      }
+
+      function copyToClipboard() {
+        navigator.clipboard.writeText($('.rawoutput').html());
+      }
+    </script>
+  </body>
+</html>
