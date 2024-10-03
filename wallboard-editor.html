@@ -733,12 +733,21 @@
         const destCell = event['target']['id'];
 
         if (destCell != sourceCell) {
-          if (sourceCell in cells) { const tempDetails = cells[sourceCell]; }
-          if (destCell in cells) { cells[sourceCell] = cells[destCell]; }
-          if (sourceCell in cells) { cells[destCell] = tempDetails; }
-        }
+          let tempDetails;
+
+          const sourceExists = (sourceCell in cells);
+          const destinationExists = (destCell in cells);
+
+          if (destinationExists) { tempDetails = cells[destCell]; }
+          if (sourceExists) { cells[destCell] = cells[sourceCell]; }
+          if (destinationExists) { cells[sourceCell] = tempDetails; }
+          
+          if (! sourceExists) { delete cells[destCell]; }
+          if (! destinationExists) { delete cells[sourceCell]; }
       
-        changeGrid();
+          changeGrid();
+          editCell(destCell);
+        }
       }
 
       function produceOutput() {
