@@ -161,12 +161,12 @@ Resources:
     Properties:
       FunctionName: "Connect-Wallboard-Render"
       Code:
-        S3Bucket: !Sub "cfn-code-${AWS::Region}"
+        S3Bucket: !Sub "xcafockufhle-${AWS::Region}"
         S3Key: render-wallboard.zip
       Description: "Connect wallboard rendering function"
       Handler: "render-wallboard.lambda_handler"
       Role: !GetAtt LambdaRenderRole.Arn
-      Runtime: python3.11
+      Runtime: python3.13
       Timeout: 20
       Environment:
         Variables:
@@ -185,12 +185,12 @@ Resources:
     Properties:
       FunctionName: "Connect-Wallboard-Agent-Events"
       Code:
-        S3Bucket: !Sub "cfn-code-${AWS::Region}"
+        S3Bucket: !Sub "xcafockufhle-${AWS::Region}"
         S3Key: process-agent-event.zip
       Description: "Connect wallboard agent event processing"
       Handler: "process-agent-event.lambda_handler"
       Role: !GetAtt LambdaAgentRole.Arn
-      Runtime: python3.11
+      Runtime: python3.13
       Timeout: 20
       Environment:
         Variables:
@@ -211,12 +211,12 @@ Resources:
     Properties:
       FunctionName: "Connect-Wallboard-Historical-Metrics"
       Code:
-        S3Bucket: !Sub "cfn-code-${AWS::Region}"
+        S3Bucket: !Sub "xcafockufhle-${AWS::Region}"
         S3Key: get-historical-metrics.zip
       Description: "Connect wallboard historical metrics data retrieval"
       Handler: "get-historical-metrics.lambda_handler"
       Role: !GetAtt LambdaHistoricalRole.Arn
-      Runtime: python3.11
+      Runtime: python3.13
       Timeout: 20
       Environment:
         Variables:
