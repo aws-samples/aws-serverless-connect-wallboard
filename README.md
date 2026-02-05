@@ -184,6 +184,21 @@ In addition to `WarnAbove` and `AlertAbove` there are also `WarnBelow` and `Aler
 ### Agent states
 Make sure that you define colours for each agent state that has been created in Connect. There are no default colours in the wallboard for each state so if a state is detected that doesn't have a colour, the default background colour applies.
 
+Possible states that an agent can be in are:
+- Login
+- Logout
+- Available
+- On Contact
+- On Hold
+- Missed
+- Paused
+- Rejected
+- After Call Work
+- Error
+- Unknown
+
+You can modify how Connect states [as listed in the documentation](https://docs.aws.amazon.com/connect/latest/adminguide/agent-event-stream-model.html#Contact) are mapped to wallboard states by modifing `process-agent-event.py` at around lines 86-105.
+
 To show an agent state in a cell you do not need to create a reference, the login name of the agent is all that is required:
 ```yaml
 AgentStates:

@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 #
-# Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2026 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this
 # software and associated documentation files (the "Software"), to deal in the Software
@@ -79,7 +79,7 @@ def lambda_handler(event, context):
             Username  = AgentEvent['CurrentAgentSnapshot']['Configuration']['Username']
 
             if State == 'Available':
-                Contacts = AgentEvent["CurrentAgentSnapshot"]["Contacts"]
+                Contacts = AgentEvent['CurrentAgentSnapshot']['Contacts']
 
                 if Contacts:
                     for Contact in Contacts:
@@ -88,8 +88,22 @@ def lambda_handler(event, context):
                             State = 'On Contact'
                         elif ContactState == 'CONNECTING':
                             State = 'On Contact'
-                        else:
+                        elif ContactState == 'PENDING':
+                            State = 'On Contact'
+                        elif ContactState == 'CONNECTED_ONHOLD':
+                            State = 'On Hold'
+                        elif ContactState == 'MISSED':
+                            State = 'Missed'
+                        elif ContactState == 'PAUSED':
+                            State = 'Paused'
+                        elif ContactState == 'REJECTED':
+                            State = 'Rejected'
+                        elif ContactState == 'ENDED':
                             State = 'After Call Work'
+                        elif ContactState == 'ERROR':
+                            State = 'Error'
+                        else:
+                            State = 'Unknown'
                 else:
                     State = 'Available'
 
