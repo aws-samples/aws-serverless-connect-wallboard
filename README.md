@@ -7,6 +7,7 @@ First, you will need an Amazon Connect instance up and running. If you wish to t
 Next, you will need to deploy the [CloudFormation template](https://github.com/aws-samples/aws-serverless-connect-wallboard/blob/master/wallboard-cfn.yaml) which will build the Lambda functions, DynamoDB table and API Gateway components for you.
 
 The DynamoDB table holds data that will be displayed on the wallboard (this data is refreshed periodically - see below for more information) and the configuration for the wallboard. You can edit the DynamoDB table directly to change the look of your wallboard but it's probably easier to edit a YAML definition file as described below. You can have multiple wallboard definitions contained in a single DynamoDB table. You can also collect historical and real-time data from multiple Connect instances. If you wish to collect agent events from multiple Connect instances you will need to configure Kinesis to deliver the events to Lambda manually (which will be processed by the [agent event handler](https://github.com/aws-samples/aws-serverless-connect-wallboard/blob/master/process-agent-event.py)).
+
 ### Wallboard Configuration
 Use the [wallboard import utility](https://github.com/aws-samples/aws-serverless-connect-wallboard/blob/master/wallboard-import.py) to import a YAML definition file for each wallboard into DynamoDB.
 
@@ -58,10 +59,12 @@ Rows:
       Cells: <number of columns to span this cell across - default=1>
 ```
 The `Format` parameter is used for converting a numeric data point (which should contain an integer specifying seconds) into a HH:MM:SS string. The only format supported currently is `Time`. Any other format type will be ignored. If this paramter is used on string data it will be ignored.
+
 ### Browser-based Editing
 While you can manually edit your wallboard configuration file you might instead try using the [browser-based editing tool](wallboard-editor.html). An understanding of the topics below is still going to be important but the editor allows for each parameter in the wallboard to be entered and the configuration file is built automatically.
 
 Note that cells can be dragged/dropped to rearrange your wallboard.
+
 ### References
 When specifying references to data in Amazon Connect the format for each is as follows:
 ```yaml
@@ -112,6 +115,7 @@ Finally, you need to specify the metric that you wish to reference. There are ma
 See the [GetCurrentMetricData API documentation](https://docs.aws.amazon.com/connect/latest/APIReference/API_GetCurrentMetricData.html) for a complete list and description of real-time metrics and the [GetMetric API documentation](https://docs.aws.amazon.com/connect/latest/APIReference/API_GetMetricData.html) for historical metrics.
 
 In a cell, you specify the data that you wish to display by using the `Reference` tag. The data can be a direct reference (i.e. data that is being drawn from Connect directly); it can be the result of a calculation (several metrics that have been somehow modified - see below); or it can be the name of an agent (see below). Note that cell data can also be static - you may want to display a heading for a column or description for a cell.
+
 #### Special note about SERVICE_LEVEL
 Thanks to `eaagastr` for pointing this out.
 
@@ -120,6 +124,7 @@ SERVICE_LEVEL is an historical metric that requires an additional parameter: Thr
 For the time being, there is a small hack into the code so that it doesn't throw an error when SERVICE_LEVEL is requested as a metric. At the top of `get-historical-metrics.py` you'll see a variable which is `ServiceLevelThreshold` and it is set to 60 (seconds). This is static across all queues - you can change this value (between 1 and 604800 inclusive) but you can't set it individually per queue.
 
 In future, this might change - so that you can specify a different threshold per queue. If this is of interest, create a GitHub issue.
+
 ### Calculations
 Calculations allow you to take metrics and perform simple mathematical operations on them. For example, you may have three queues and wish to display the total number of callers for all three queues. To do this, you could use the following snippet:
 ```yaml
@@ -155,6 +160,7 @@ Rows:
       Reference: TotalCallersWaiting
 ```
 Note that simple mathematical functions such as `int()`, `round()`, `min()` and `max()` are supported in calculations.
+
 ### Thresholds
 Setting thresholds lets you change the background colour of a cell based on the value in that cell or in another cell. You can use this to highlight when (for example) to warn you before a SLA is breached (say, when the maximum waiting time is over two minutes) by setting a threshold at one minute using the `WarnAbove` value and another threshold at two miuntes to show the breach using the `AlertAbove` value.
 
@@ -181,6 +187,7 @@ Rows:
 You can apply the threshold reference to any other cells even if they do not contain the data that is causing the breach of threshold. That way, you could turn a whole row or column yellow or red (the default colours) to highlight a threshold breach. Thresholds may also reference the output of calculations rather than raw data from Connect.
 
 In addition to `WarnAbove` and `AlertAbove` there are also `WarnBelow` and `AlertBelow` keywords. You may wish to create visible warnings and alerts when metrics are below a certain value. For example, you might want to know when there are less than a specific number of agents available to answer calls.
+
 ### Agent states
 Make sure that you define colours for each agent state that has been created in Connect. There are no default colours in the wallboard for each state so if a state is detected that doesn't have a colour, the default background colour applies.
 
@@ -276,11 +283,13 @@ Rows:
       Reference: =activeagents
 ```
 Here the cells will only contain details of agents who are not in a `Logout` state.
+
 ### Loading Wallboard Configuration Files 
 Once you have your YAML definition file you need to import it into the DynamoDB table. To do this you'll need the [import utility](https://github.com/aws-samples/aws-serverless-connect-wallboard/blob/master/wallboard-import.py):
 ```sh
 ./wallboard-import.py <definition file>
 ```
+
 ### Calling the API
 Once imported you can call the API Gateway endpoint that the CloudFormation template configured for you. You can find this in the `Outputs` section of the CloudFormation stack.
 ```
@@ -330,17 +339,43 @@ The structure returned will look like this (non-JSON comments embedded for clari
 }
 ```
 It is up to you to determine the appropriate way to parse the data for your purposes but the simplest way is that the metrics are contained within a JSON object called 'WallboardData' and each cell is labelled `R<row number>C<column number>`. The formatting hints (colours and threshold alerts) can be used by you or ignored as you see fit.
+
 ### Wallboard Tuning
 You may wish to tune specific events in the wallboard system.
 
 Historical metrics are retrieved every minute. This is triggered by CloudWatch Events and can be changed by modifying the `Connect-Wallboard-Historical-Collection` rule. You can also modify the [CloudFormation template](https://github.com/aws-samples/aws-serverless-connect-wallboard/blob/master/wallboard-cfn.yaml) before deployment.
 
 The wallboard configuration is checked every 300 seconds (five minutes) by default. This means that when you update an existing wallboard configuration it may take up to five minutes for the changes to be visible. This can be changed by adding an environment variable called `ConfigTimeout` for the `Connect-Wallboard-Render` and `Connect-Wallboard-Historical-Metrics` Lambda functions and making the value the number of seconds the function should wait before checking for any updated configuration. A small value will mean the functions read from the DynamoDB table more often. This may increase the cost of the solution due to increase database table activity.
+
 ### HTML Styles
 When rendered as a HTML table there are specific CSS stylesheet classes applied to each element. You can choose to override the default colours, fonts and formatting of the table if you wish.
   - The table will have a stylesheet class of `wallboard-<wallboard name>`. For example, if your wallboard has a name of "primary" then the class will be `wallboard-primary`.
   - Each cell has a class name which is related to the row and column of that cell. The first cell on the first row of the wallboard will have a class of `R1C1` while the third cell on the fourth row will be `R4C3`.
 
 Because each cell is formatted with an inline style, you may have to use the `!important` CSS property to override that style.
+
+### Deployment
+This repo has moved to a CDK deployment model. A modified CloudFormation template (`wallboard-cfn.yaml`) is still available but you will need to ZIP all of the Lambda functions and host them in a S3 bucket of your choosing.
+
+To deploy using CDK:
+1. Clone this repo and change into the repo directory.
+2. Change to the `cdk/` directory.
+3. Run the following commands:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cdk bootstrap
+cdk synth
+cdk deploy --parameters KinesisAgentStream=<ARN of Kinesis Stream>
+```
+
+You may change the default name of the DynamoDB table by using the following command:
+
+```bash
+cdk deploy --parameters KinesisAgentStream=<ARN of Kinesis Stream> --parameters DDBTable=<new table name>
+```
+
 ## License Summary
 This sample code is made available under the MIT-0 license. See the LICENSE file.

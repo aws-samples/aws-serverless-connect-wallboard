@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: 2010-09-09
 
 #
-# Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2026 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this
 # software and associated documentation files (the "Software"), to deal in the Software
@@ -21,6 +21,9 @@ Description: >
   Create the Lambda functions and other components required for the Connect Wallboard.
 
 Parameters:
+  DeploymentBucket:
+    Type: String
+    Description: S3 bucket where Lambda deployment ZIP files are stored
   DDBTable:
     Type: String
     Description: DynamoDB table to create
@@ -161,7 +164,7 @@ Resources:
     Properties:
       FunctionName: "Connect-Wallboard-Render"
       Code:
-        S3Bucket: !Sub "xcafockufhle-${AWS::Region}"
+        S3Bucket: !Ref DeploymentBucket
         S3Key: render-wallboard.zip
       Description: "Connect wallboard rendering function"
       Handler: "render-wallboard.lambda_handler"
@@ -185,7 +188,7 @@ Resources:
     Properties:
       FunctionName: "Connect-Wallboard-Agent-Events"
       Code:
-        S3Bucket: !Sub "xcafockufhle-${AWS::Region}"
+        S3Bucket: !Ref DeploymentBucket
         S3Key: process-agent-event.zip
       Description: "Connect wallboard agent event processing"
       Handler: "process-agent-event.lambda_handler"
@@ -211,7 +214,7 @@ Resources:
     Properties:
       FunctionName: "Connect-Wallboard-Historical-Metrics"
       Code:
-        S3Bucket: !Sub "xcafockufhle-${AWS::Region}"
+        S3Bucket: !Ref DeploymentBucket
         S3Key: get-historical-metrics.zip
       Description: "Connect wallboard historical metrics data retrieval"
       Handler: "get-historical-metrics.lambda_handler"
