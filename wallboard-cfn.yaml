@@ -167,7 +167,7 @@ Resources:
         S3Bucket: !Ref DeploymentBucket
         S3Key: render-wallboard.zip
       Description: "Connect wallboard rendering function"
-      Handler: "render-wallboard.lambda_handler"
+      Handler: lambda_function.lambda_handler
       Role: !GetAtt LambdaRenderRole.Arn
       Runtime: python3.13
       Timeout: 20
@@ -191,7 +191,7 @@ Resources:
         S3Bucket: !Ref DeploymentBucket
         S3Key: process-agent-event.zip
       Description: "Connect wallboard agent event processing"
-      Handler: "process-agent-event.lambda_handler"
+      Handler: lanbda_function.lambda_handler
       Role: !GetAtt LambdaAgentRole.Arn
       Runtime: python3.13
       Timeout: 20
@@ -217,7 +217,7 @@ Resources:
         S3Bucket: !Ref DeploymentBucket
         S3Key: get-historical-metrics.zip
       Description: "Connect wallboard historical metrics data retrieval"
-      Handler: "get-historical-metrics.lambda_handler"
+      Handler: lambda_function.lambda_handler
       Role: !GetAtt LambdaHistoricalRole.Arn
       Runtime: python3.13
       Timeout: 20
